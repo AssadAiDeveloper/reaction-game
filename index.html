@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reaction Timer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;700&family=Inter:wght@400;500&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ─────────────────────────────────────────────────
+       DESIGN TOKENS — every colour lives here once.
+       All other rules reference these variables so a
+       palette swap is a one-line change.
+    ───────────────────────────────────────────────── */
+    :root {
+      --color-bg:             #0D0D0D;
+      --color-surface:        #1A1A2E;
+      --color-mint:           #00F5A0;
+      --color-amber:          #F5A623;
+      --color-red:            #FF4D4D;
+      --color-text-primary:   #E8E8F0;
+      --color-text-secondary: #8888A8;
+
+      /* Derived / UI tokens */
+      --card-border:          var(--color-text-secondary);
+      --card-border-width:    2px;
+
+      /* Typography scale */
+      --font-display: 'Space Grotesk', sans-serif;
+      --font-body:    'Inter', sans-serif;
+
+      /* Spacing rhythm */
+      --space-xs:  0.375rem;
+      --space-sm:  0.75rem;
+      --space-md:  1.25rem;
+      --space-lg:  2rem;
+      --space-xl:  3rem;
+    }
+
+    /* ─────────────────────────────────────────────────
+       RESET & BASE
+    ───────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--color-bg);
+      color: var(--color-text-primary);
+      font-family: var(--font-body);
+      overflow: hidden;           /* canvas handles all scrolling */
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* ─────────────────────────────────────────────────
+       THREE.JS CANVAS — fixed, full-screen, behind UI
+    ───────────────────────────────────────────────── */
+    #bg {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      display: block;
+    }
+
+    /* ─────────────────────────────────────────────────
+       APP WRAPPER — fills viewport, centres the card
+    ───────────────────────────────────────────────── */
+    #app {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;          /* card stretches full width */
+      justify-content: flex-start;   /* pin to the top */
+      padding: var(--space-md);
+    }
+
+    /* ─────────────────────────────────────────────────
+       GAME CARD — semi-transparent so WebGL shows through
+    ───────────────────────────────────────────────── */
+    .card {
+      width: 100%;
+      min-width: 0;
+      max-width: none;               /* span the full available width */
+      background: rgba(13, 13, 20, 0.35);
+      backdrop-filter: blur(6px) saturate(1.1);
+      -webkit-backdrop-filter: blur(6px) saturate(1.1);
+      border: var(--card-border-width) solid var(--card-border);
+      border-radius: 16px;
+      padding: var(--space-sm) var(--space-lg);
+      display: flex;
+      flex-direction: row;           /* horizontal layout */
+      align-items: center;
+      gap: var(--space-lg);
+      flex-wrap: wrap;               /* gracefully wraps on very small screens */
+      transition:
+        border-color 0.35s ease,
+        box-shadow   0.35s ease;
+    }
+
+    /* State-driven border colours */
+    .card[data-state="react"]   { border-color: var(--color-mint);  box-shadow: 0 0 32px rgba(0,245,160,0.25); }
+    .card[data-state="result"]  { border-color: var(--color-mint);  box-shadow: 0 0 24px rgba(0,245,160,0.15); }
+    .card[data-state="ready"]   { border-color: var(--color-amber); box-shadow: 0 0 24px rgba(245,166,35,0.20); }
+    .card[data-state="waiting"] { border-color: var(--color-amber); }
+    .card[data-state="early"]   { border-color: var(--color-red);   box-shadow: 0 0 28px rgba(255,77,77,0.30); }
+
+    /* ─────────────────────────────────────────────────
+       HEADER
+    ───────────────────────────────────────────────── */
+    .header {
+      text-align: left;
+      flex-shrink: 0;
+    }
+
+    .header h1 {
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: clamp(1rem, 2.5vw, 1.3rem);
+      letter-spacing: -0.02em;
+      color: var(--color-text-primary);
+      line-height: 1.1;
+      white-space: nowrap;
+    }
+
+    .header p {
+      font-size: clamp(0.65rem, 1.5vw, 0.75rem);
+      color: var(--color-text-secondary);
+      margin-top: 2px;
+      white-space: nowrap;
+    }
+
+    /* ─────────────────────────────────────────────────
+       STIMULUS AREA — the "press zone"
+    ───────────────────────────────────────────────── */
+    #stimulus-area {
+      flex: 1;                       /* takes remaining space in the row */
+      min-width: 160px;
+      min-height: 60px;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-sm);
+      border-radius: 10px;
+      cursor: default;
+      user-select: none;
+      transition:
+        background 0.25s ease,
+        transform  0.1s ease;
+    }
+
+    #stimulus-area:active { transform: scale(0.98); }
+
+    /* Active game states make the stimulus area clickable */
+    #stimulus-area[data-clickable="true"] {
+      cursor: pointer;
+    }
+
+    /* State backgrounds */
+    #stimulus-area[data-state="idle"]    { background: rgba(136,136,168,0.04); }
+    #stimulus-area[data-state="waiting"] { background: rgba(245,166,35,0.05); }
+    #stimulus-area[data-state="ready"]   { background: rgba(245,166,35,0.07); }
+    #stimulus-area[data-state="react"]   {
+      background: rgba(0,245,160,0.09);
+      animation: pulse-mint 0.6s ease infinite alternate;
+    }
+    #stimulus-area[data-state="result"]  { background: rgba(0,245,160,0.05); }
+    #stimulus-area[data-state="early"]   {
+      background: rgba(255,77,77,0.09);
+      animation: shake 0.4s ease;
+    }
+
+    @keyframes pulse-mint {
+      from { box-shadow: 0 0 0px rgba(0,245,160,0); }
+      to   { box-shadow: 0 0 28px rgba(0,245,160,0.35); }
+    }
+
+    @keyframes shake {
+      0%,100% { transform: translateX(0); }
+      20%     { transform: translateX(-6px); }
+      40%     { transform: translateX(6px); }
+      60%     { transform: translateX(-4px); }
+      80%     { transform: translateX(4px); }
+    }
+
+    /* ─── State label ─── */
+    #state-label {
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: clamp(1rem, 2.5vw, 1.4rem);
+      letter-spacing: -0.01em;
+      text-align: center;
+      white-space: nowrap;
+      transition: color 0.3s ease, opacity 0.3s ease;
+    }
+
+    /* ─── Sub-label / instruction ─── */
+    #sub-label {
+      font-size: clamp(0.65rem, 1.5vw, 0.78rem);
+      color: var(--color-text-secondary);
+      text-align: center;
+      white-space: nowrap;
+      transition: opacity 0.3s ease;
+    }
+
+    /* ─── Reaction time result — sits above the stats grid ─── */
+    #result-time {
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: clamp(1.1rem, 3vw, 1.5rem);
+      color: var(--color-mint);
+      letter-spacing: -0.02em;
+      line-height: 1;
+      text-align: center;
+      white-space: nowrap;
+      display: none;
+      flex-shrink: 0;
+    }
+
+    #result-time.visible { display: block; }
+
+    /* ─────────────────────────────────────────────────
+       STATS GRID — 2×2 on mobile, 4×1 wider
+    ───────────────────────────────────────────────── */
+    .stats-grid {
+      display: flex;
+      flex-direction: row;
+      gap: var(--space-sm);
+      flex-shrink: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    /* No media query needed — always a row in the horizontal bar */
+
+    .stat-cell {
+      background: rgba(255,255,255,0.04);
+      border-radius: 8px;
+      padding: var(--space-xs) var(--space-sm);
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      flex-shrink: 0;
+    }
+
+    .stat-value {
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: clamp(0.8rem, 1.8vw, 1rem);
+      color: var(--color-text-primary);
+      white-space: nowrap;
+      transition: color 0.3s ease;
+    }
+
+    .stat-value.highlight { color: var(--color-mint); }
+
+    .stat-label {
+      font-size: clamp(0.55rem, 1.2vw, 0.65rem);
+      color: var(--color-text-secondary);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      white-space: nowrap;
+    }
+
+    .stat-rounds {
+      /* No special overrides needed — fits naturally in the row */
+    }
+
+    /* ─────────────────────────────────────────────────
+       BUTTONS
+    ───────────────────────────────────────────────── */
+    .btn {
+      font-family: var(--font-body);
+      font-weight: 500;
+      font-size: clamp(0.75rem, 1.8vw, 0.88rem);
+      padding: 0.5em 1.4em;
+      border-radius: 50px;
+      border: 2px solid transparent;
+      cursor: pointer;
+      letter-spacing: 0.03em;
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition:
+        background 0.2s ease,
+        transform  0.1s ease,
+        box-shadow 0.2s ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .btn:active { transform: scale(0.96); }
+
+    .btn-primary {
+      background: var(--color-mint);
+      color: #0D0D0D;
+      border-color: var(--color-mint);
+    }
+
+    .btn-primary:hover {
+      box-shadow: 0 0 20px rgba(0,245,160,0.4);
+    }
+
+    .btn-secondary {
+      background: transparent;
+      color: var(--color-text-secondary);
+      border-color: var(--color-text-secondary);
+    }
+
+    .btn-secondary:hover {
+      color: var(--color-text-primary);
+      border-color: var(--color-text-primary);
+    }
+
+    /* ─────────────────────────────────────────────────
+       ROUND COUNTER BADGE
+    ───────────────────────────────────────────────── */
+    #round-badge {
+      position: absolute;
+      top: var(--space-sm);
+      right: var(--space-md);
+      font-size: 0.72rem;
+      font-weight: 500;
+      color: var(--color-text-secondary);
+      letter-spacing: 0.05em;
+    }
+
+    /* ─────────────────────────────────────────────────
+       UTILITY
+    ───────────────────────────────────────────────── */
+    .hidden { display: none !important; }
+
+    .fade-in {
+      animation: fadeIn 0.3s ease forwards;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- THREE.JS LAYER: full-screen, behind everything -->
+  <canvas id="bg"></canvas>
+
+  <!-- GAME UI LAYER -->
+  <div id="app">
+    <div class="card" data-state="idle" id="card">
+
+      <div class="header">
+        <h1>Reaction Timer</h1>
+        <p>How fast can you click when the signal fires?</p>
+      </div>
+
+      <!-- Clickable stimulus zone -->
+      <div id="stimulus-area" data-state="idle" data-clickable="false" role="button" aria-label="Reaction stimulus area" tabindex="0">
+        <div id="state-label" style="color: var(--color-text-secondary);">Ready?</div>
+        <div id="sub-label">Press Start to begin</div>
+      </div>
+
+      <!-- Reaction time result — shown below stimulus, above stats -->
+      <div id="result-time" aria-live="polite"></div>
+
+      <!-- Session statistics -->
+      <div class="stats-grid" id="stats-grid">
+        <div class="stat-cell">
+          <div class="stat-value" id="stat-last">—</div>
+          <div class="stat-label">Last</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-value" id="stat-avg">—</div>
+          <div class="stat-label">Average</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-value" id="stat-best">—</div>
+          <div class="stat-label">Best</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-value" id="stat-worst">—</div>
+          <div class="stat-label">Worst</div>
+        </div>
+        <div class="stat-cell stat-rounds">
+          <div class="stat-value" id="stat-rounds">0</div>
+          <div class="stat-label">Rounds</div>
+        </div>
+      </div>
+
+      <!-- Action buttons -->
+      <div id="btn-group" style="display:flex; gap:0.5rem; flex-wrap:nowrap; align-items:center; flex-shrink:0;">
+        <button class="btn btn-primary" id="btn-start">Start</button>
+        <button class="btn btn-secondary hidden" id="btn-reset">Reset Stats</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- THREE.JS FROM CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <script>
+    /* ══════════════════════════════════════════════════════════════════
+     *  ARCHITECTURE OVERVIEW
+     * ══════════════════════════════════════════════════════════════════
+     *
+     *  STATE MACHINE PATTERN
+     *  ─────────────────────
+     *  All application state lives in a single `state` string variable.
+     *  The `setState(newState)` function is the ONLY place that mutates
+     *  this variable. It then calls two targeted update functions:
+     *
+     *    updateUI(newState)      — syncs DOM classes, text, visibility
+     *    updateScene(newState)   — syncs Three.js colour/speed targets
+     *
+     *  No event handler, timeout, or animation frame mutates the DOM or
+     *  scene directly. They call setState() and let the machine drive.
+     *  This makes each state transition deterministic, debuggable, and
+     *  easy to extend — adding a new state means adding one case to each
+     *  switch block rather than hunting through scattered callbacks.
+     *
+     *  THREE.JS / ANIMATION LOOP SEPARATION
+     *  ─────────────────────────────────────
+     *  The requestAnimationFrame loop (animate()) is purely visual. It
+     *  reads `targetColor`, `targetSpeed`, and `targetScale` — three
+     *  lerp targets that setState() updates — and moves toward them each
+     *  frame. The loop has zero knowledge of timers, user intent, or
+     *  game logic. This separation means the visual layer is robust even
+     *  if game logic is paused, errors, or runs slowly.
+     *
+     *  TIMING ACCURACY
+     *  ────────────────
+     *  We use performance.now() exclusively. Unlike Date.now(), which
+     *  rounds to 1 ms (or more in some browsers), performance.now()
+     *  gives sub-millisecond resolution and is immune to system clock
+     *  changes. The start timestamp is captured the instant the "react"
+     *  state fires; the end timestamp is captured in the pointerdown
+     *  event handler; the delta is the reaction time.
+     *
+     *  EARLY CLICK DETECTION
+     *  ──────────────────────
+     *  During `waiting` and `ready` states the stimulus area is
+     *  listening for clicks/taps. If a pointer event fires in those
+     *  states, setState('early') is called immediately, cancelling the
+     *  pending timeout and restarting after a short delay — never
+     *  recording a time for that round.
+     *
+     *  RESPONSIVE THREE.JS
+     *  ────────────────────
+     *  A ResizeObserver on <body> calls renderer.setSize() and updates
+     *  camera.aspect whenever the viewport changes, ensuring the WebGL
+     *  canvas always fills the screen correctly on all devices.
+     * ══════════════════════════════════════════════════════════════════
+     */
+
+    'use strict';
+
+    /* ──────────────────────────────────────────────────────────────────
+     *  1. THREE.JS SCENE SETUP
+     * ────────────────────────────────────────────────────────────────── */
+
+    const canvas = document.getElementById('bg');
+
+    // Renderer: alpha=true keeps the canvas transparent where no objects
+    // are rendered, letting the CSS body background show through.
+    const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+
+    const scene = new THREE.Scene();
+
+    // Perspective camera: moderate FOV feels natural, not fisheye.
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.z = 14;
+
+    // ── Lighting ──
+    // AmbientLight ensures no face is completely black; PointLight gives
+    // the specularity that makes MeshPhongMaterial feel three-dimensional.
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+    scene.add(ambientLight);
+
+    const pointLight = new THREE.PointLight(0xffffff, 1.8, 60);
+    pointLight.position.set(8, 10, 10);
+    scene.add(pointLight);
+
+    // Secondary fill light from below-left for colour variation on faces
+    const fillLight = new THREE.PointLight(0x8888ff, 0.6, 40);
+    fillLight.position.set(-8, -6, 6);
+    scene.add(fillLight);
+
+    // ── Geometry catalogue ──
+    // Three shape types chosen for their visual variety:
+    //   TorusKnot   — complex, organic; looks great spinning
+    //   Icosahedron — geometric, crystalline; subtle facets
+    //   Octahedron  — clean diamond; rotates symmetrically
+    const geometries = [
+      new THREE.TorusKnotGeometry(0.65, 0.22, 90, 14),
+      new THREE.IcosahedronGeometry(0.80, 1),
+      new THREE.OctahedronGeometry(0.90, 0),
+      new THREE.TorusKnotGeometry(0.50, 0.16, 80, 12),
+      new THREE.IcosahedronGeometry(0.60, 0),
+      new THREE.OctahedronGeometry(0.70, 0),
+      new THREE.TorusKnotGeometry(0.75, 0.18, 100, 14),
+    ];
+
+    // Shared material — one instance, colour updated globally each frame
+    // via lerping `currentColor` toward `targetColor`.
+    // We use MeshPhongMaterial: shininess gives a nice specular highlight
+    // that makes colour transitions more dramatic (the mint glow pops).
+    const shapeMaterial = new THREE.MeshPhongMaterial({
+      color:     new THREE.Color('#8888A8'),
+      shininess: 55,
+      specular:  new THREE.Color(0x444466),
+    });
+
+    // Build the mesh array, scattered across the scene
+    const meshes = [];
+    const SHAPE_COUNT = 7;
+
+    geometries.forEach((geo, i) => {
+      // Each shape shares the same material (colour update is global)
+      // but has independent position, scale, and rotation velocity.
+      const mesh = new THREE.Mesh(geo, shapeMaterial.clone());
+
+      // Distribute shapes in a rough hemisphere in front of the camera
+      const angle  = (i / SHAPE_COUNT) * Math.PI * 2;
+      const radius = 4.5 + (i % 3) * 1.8;
+      const depth  = -1 + (i % 4) * 0.6;
+
+      mesh.position.set(
+        Math.cos(angle) * radius * 0.9,
+        Math.sin(angle) * radius * 0.55,
+        depth
+      );
+
+      // Randomise initial rotation so they don't all face the same way
+      mesh.rotation.set(
+        Math.random() * Math.PI,
+        Math.random() * Math.PI,
+        Math.random() * Math.PI
+      );
+
+      // Store per-mesh animation data as user data
+      mesh.userData = {
+        rotVel:   new THREE.Vector3(
+          (Math.random() - 0.5) * 0.008,
+          (Math.random() - 0.5) * 0.008,
+          (Math.random() - 0.5) * 0.005
+        ),
+        baseScale:    0.75 + Math.random() * 0.55,
+        scaleOffset:  Math.random() * Math.PI * 2,  // phase for breathing
+        floatOffset:  Math.random() * Math.PI * 2,  // phase for drift
+        floatAmp:     0.06 + Math.random() * 0.06,
+      };
+
+      mesh.scale.setScalar(mesh.userData.baseScale);
+      meshes.push(mesh);
+      scene.add(mesh);
+    });
+
+    // ── Scene lerp targets ──
+    // The animation loop moves TOWARD these values each frame.
+    // setState() sets them; the loop reads them.
+    const currentColor = new THREE.Color('#8888A8');
+    const targetColor  = new THREE.Color('#8888A8');
+    let   targetSpeed  = 1.0;   // multiplier on rotation velocity
+    let   currentSpeed = 1.0;
+    let   targetScale  = 1.0;   // multiplier on base scale
+    let   currentScale = 1.0;
+
+    // Per-state Three.js colour targets (matches design spec)
+    const STATE_COLORS = {
+      idle:    '#8888A8',
+      waiting: '#C48A1A',   // amber at low saturation
+      ready:   '#F5A623',   // amber brightening
+      react:   '#00F5A0',   // electric mint
+      result:  '#44C490',   // mint fading back toward slate
+      early:   '#FF4D4D',   // signal red
+    };
+
+    const STATE_SPEEDS = {
+      idle:    1.0,
+      waiting: 1.2,
+      ready:   2.2,
+      react:   7.0,    // dramatic spin-up
+      result:  1.6,
+      early:   4.0,    // jolt
+    };
+
+    const STATE_SCALES = {
+      idle:    1.0,
+      waiting: 1.0,
+      ready:   1.1,
+      react:   1.35,   // burst outward
+      result:  1.05,
+      early:   1.25,
+    };
+
+    /* ──────────────────────────────────────────────────────────────────
+     *  2. GAME STATE MACHINE
+     * ────────────────────────────────────────────────────────────────── */
+
+    // Single source of truth for current state
+    let state = 'idle';
+
+    // DOM references (captured once to avoid repeated querySelector calls)
+    const card          = document.getElementById('card');
+    const stimulusArea  = document.getElementById('stimulus-area');
+    const stateLabel    = document.getElementById('state-label');
+    const subLabel      = document.getElementById('sub-label');
+    const resultTime    = document.getElementById('result-time');
+    const btnStart      = document.getElementById('btn-start');
+    const btnReset      = document.getElementById('btn-reset');
+    const statLast      = document.getElementById('stat-last');
+    const statAvg       = document.getElementById('stat-avg');
+    const statBest      = document.getElementById('stat-best');
+    const statWorst     = document.getElementById('stat-worst');
+    const statRounds    = document.getElementById('stat-rounds');
+
+    // Session statistics accumulator
+    const stats = {
+      times:  [],
+      rounds: 0,
+    };
+
+    // Timing bookmarks
+    let   reactionStart   = 0;
+    let   waitTimeout     = null;
+
+    /**
+     * setState — the single entry point for all state changes.
+     * Cancels any pending timeout, updates the `state` variable, then
+     * calls the two update helpers to sync UI and Three.js scene.
+     */
+    function setState(newState) {
+      // Cancel any pending wait timer when state changes
+      if (waitTimeout !== null) {
+        clearTimeout(waitTimeout);
+        waitTimeout = null;
+      }
+
+      state = newState;
+      updateUI(newState);
+      updateScene(newState);
+    }
+
+    /**
+     * updateUI — syncs all DOM elements to the new state.
+     * Only called from setState; never called directly.
+     */
+    function updateUI(s) {
+      // Sync data attributes (drives CSS rules)
+      card.dataset.state         = s;
+      stimulusArea.dataset.state = s;
+
+      // Reset result time visibility
+      resultTime.classList.remove('visible');
+
+      switch (s) {
+
+        case 'idle':
+          stateLabel.textContent = 'Ready?';
+          stateLabel.style.color = 'var(--color-text-secondary)';
+          subLabel.textContent   = 'Press Start to begin';
+          subLabel.style.opacity = '1';
+          stimulusArea.dataset.clickable = 'false';
+          stimulusArea.setAttribute('aria-label', 'Reaction stimulus — game has not started');
+          btnStart.textContent   = 'Start';
+          btnStart.classList.remove('hidden');
+          break;
+
+        case 'waiting':
+          stateLabel.textContent = 'Wait…';
+          stateLabel.style.color = 'var(--color-amber)';
+          subLabel.textContent   = 'Watch the signal, not the clock';
+          stimulusArea.dataset.clickable = 'true';
+          stimulusArea.setAttribute('aria-label', 'Waiting — do not click yet');
+          btnStart.classList.add('hidden');
+          break;
+
+        case 'ready':
+          stateLabel.textContent = 'Get ready…';
+          stateLabel.style.color = 'var(--color-amber)';
+          subLabel.textContent   = 'The signal is coming';
+          stimulusArea.dataset.clickable = 'true';
+          stimulusArea.setAttribute('aria-label', 'Get ready — click immediately when the signal appears');
+          break;
+
+        case 'react':
+          stateLabel.textContent = 'CLICK!';
+          stateLabel.style.color = 'var(--color-mint)';
+          subLabel.textContent   = 'Click or tap now!';
+          stimulusArea.dataset.clickable = 'true';
+          stimulusArea.setAttribute('aria-label', 'Click now!');
+          reactionStart = performance.now();
+          break;
+
+        case 'result': {
+          const ms = Math.round(performance.now() - reactionStart);
+          recordTime(ms);
+
+          stateLabel.textContent = 'Nicely done';
+          stateLabel.style.color = 'var(--color-mint)';
+          subLabel.textContent   = 'Click Start for another round';
+          subLabel.style.opacity = '1';
+
+          resultTime.textContent = ms + ' ms';
+          resultTime.classList.add('visible');
+
+          statLast.textContent   = ms + ' ms';
+          statLast.classList.add('highlight');
+
+          stimulusArea.dataset.clickable = 'false';
+          stimulusArea.setAttribute('aria-label', 'Round complete');
+
+          btnStart.textContent = 'Play again';
+          btnStart.classList.remove('hidden');
+          btnReset.classList.remove('hidden');
+          updateStatsDisplay();
+          break;
+        }
+
+        case 'early':
+          stateLabel.textContent = 'Too early!';
+          stateLabel.style.color = 'var(--color-red)';
+          subLabel.textContent   = 'You clicked before the signal. Starting over…';
+          stimulusArea.dataset.clickable = 'false';
+          stimulusArea.setAttribute('aria-label', 'Too early — round restarting');
+
+          // Auto-restart after a short penalty delay
+          waitTimeout = setTimeout(() => setState('idle'), 2000);
+          break;
+      }
+    }
+
+    /**
+     * updateScene — sets Three.js lerp targets for the new state.
+     * Lerping happens in the animation loop, not here.
+     */
+    function updateScene(s) {
+      targetColor.set(STATE_COLORS[s] || '#8888A8');
+      targetSpeed = STATE_SPEEDS[s]  ?? 1.0;
+      targetScale = STATE_SCALES[s]  ?? 1.0;
+    }
+
+    /* ──────────────────────────────────────────────────────────────────
+     *  3. ANIMATION LOOP
+     * ────────────────────────────────────────────────────────────────── */
+
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const delta = clock.getDelta();   // seconds since last frame
+      const t     = clock.getElapsedTime();
+
+      // ── Lerp speed and scale toward targets ──
+      // Using alpha = 1 - e^(-k*dt) for framerate-independent lerp.
+      // A k of ~5 gives a snappy but smooth ~0.2s transition.
+      const lerpAlpha = 1 - Math.exp(-5 * delta);
+      currentSpeed += (targetSpeed - currentSpeed) * lerpAlpha;
+      currentScale += (targetScale - currentScale) * lerpAlpha;
+
+      // ── Lerp colour toward target ──
+      currentColor.lerp(targetColor, lerpAlpha * 1.2);
+
+      // ── Update each mesh ──
+      meshes.forEach((mesh, i) => {
+        const ud = mesh.userData;
+
+        // Rotation — velocity scaled by current speed
+        mesh.rotation.x += ud.rotVel.x * currentSpeed;
+        mesh.rotation.y += ud.rotVel.y * currentSpeed;
+        mesh.rotation.z += ud.rotVel.z * currentSpeed;
+
+        // Gentle sinusoidal float (independent of game speed)
+        const floatY = Math.sin(t * 0.4 + ud.floatOffset) * ud.floatAmp;
+        mesh.position.y += floatY * delta * 15;  // apply as velocity
+
+        // Breathing scale: subtle pulse layered on top of state scale
+        const breathe = 1 + Math.sin(t * 1.1 + ud.scaleOffset) * 0.03;
+        mesh.scale.setScalar(ud.baseScale * currentScale * breathe);
+
+        // Apply lerped colour to each mesh's own material clone
+        mesh.material.color.copy(currentColor);
+      });
+
+      renderer.render(scene, camera);
+    }
+
+    animate();
+
+    // ── Resize handler ──
+    function onResize() {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    }
+
+    window.addEventListener('resize', onResize);
+
+    /* ──────────────────────────────────────────────────────────────────
+     *  4. GAME LOGIC
+     * ────────────────────────────────────────────────────────────────── */
+
+    /**
+     * startRound — begins the waiting → ready → react sequence.
+     * Delay is randomised between 2–5 seconds, split in half so the
+     * "get ready" stage always fires after the halfway point,
+     * increasing tension without revealing the exact moment.
+     */
+    function startRound() {
+      setState('waiting');
+
+      // Random total wait: 2000–5000 ms
+      const totalDelay = 2000 + Math.random() * 3000;
+      // "Get ready" fires at 55–65% through the wait window
+      const readyFraction  = 0.55 + Math.random() * 0.1;
+      const readyDelay     = totalDelay * readyFraction;
+
+      waitTimeout = setTimeout(() => {
+        setState('ready');
+        // Remaining time before actual stimulus
+        waitTimeout = setTimeout(() => {
+          setState('react');
+        }, totalDelay - readyDelay);
+      }, readyDelay);
+    }
+
+    /**
+     * handleClick — central pointer handler for the stimulus area.
+     * Behaviour is state-dependent:
+     *   waiting / ready  → too early
+     *   react            → record time
+     *   anything else    → ignore
+     */
+    function handleClick() {
+      if (state === 'waiting' || state === 'ready') {
+        setState('early');
+      } else if (state === 'react') {
+        setState('result');
+      }
+    }
+
+    /**
+     * recordTime — appends a reaction time to the session log
+     * and updates rolling stats.
+     */
+    function recordTime(ms) {
+      stats.times.push(ms);
+      stats.rounds += 1;
+    }
+
+    /**
+     * updateStatsDisplay — reads from stats and writes to DOM.
+     * Always called after recordTime so numbers are fresh.
+     */
+    function updateStatsDisplay() {
+      statRounds.textContent = stats.rounds;
+
+      if (stats.times.length === 0) return;
+
+      const best  = Math.min(...stats.times);
+      const worst = Math.max(...stats.times);
+      const avg   = Math.round(stats.times.reduce((a, b) => a + b, 0) / stats.times.length);
+
+      statBest.textContent  = best  + ' ms';
+      statWorst.textContent = worst + ' ms';
+      statAvg.textContent   = avg   + ' ms';
+    }
+
+    /**
+     * resetStats — clears session data and returns to idle.
+     */
+    function resetStats() {
+      stats.times  = [];
+      stats.rounds = 0;
+
+      statLast.textContent  = '—';
+      statAvg.textContent   = '—';
+      statBest.textContent  = '—';
+      statWorst.textContent = '—';
+      statRounds.textContent = '0';
+      statLast.classList.remove('highlight');
+
+      btnReset.classList.add('hidden');
+      setState('idle');
+    }
+
+    /* ──────────────────────────────────────────────────────────────────
+     *  5. EVENT LISTENERS
+     * ────────────────────────────────────────────────────────────────── */
+
+    // Start / Play again button
+    btnStart.addEventListener('click', startRound);
+    btnStart.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      startRound();
+    });
+
+    // Reset stats button
+    btnReset.addEventListener('click', resetStats);
+
+    // Stimulus area: pointer events for click AND touch on mobile
+    // We use pointerdown (not click) to capture the earliest possible moment,
+    // which gives the most accurate reaction time measurement.
+    stimulusArea.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      handleClick();
+    });
+
+    // Keyboard accessibility: Space / Enter triggers the stimulus area
+    stimulusArea.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' || e.code === 'Enter') {
+        e.preventDefault();
+        handleClick();
+      }
+    });
+
+    // Prevent context menu from long-press on mobile in the stimulus zone
+    stimulusArea.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    /* ──────────────────────────────────────────────────────────────────
+     *  6. BOOT
+     * ────────────────────────────────────────────────────────────────── */
+
+    // Kick the state machine into its initial state — this triggers both
+    // updateUI and updateScene, so the app always starts consistently
+    // regardless of what the HTML scaffold contains.
+    setState('idle');
+  </script>
+</body>
+</html>
