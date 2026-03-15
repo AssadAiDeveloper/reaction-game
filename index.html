@@ -4,44 +4,26 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Reaction Timer</title>
+
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%230A0A12' stroke='%2300F5A0' stroke-width='1.2'/%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%2300F5A0' stroke-width='2.5' opacity='0.18'/%3E%3Cellipse cx='16' cy='16' rx='11' ry='3.5' fill='none' stroke='%238888A8' stroke-width='0.8' opacity='0.7'/%3E%3Cellipse cx='16' cy='16' rx='3.5' ry='11' fill='none' stroke='%238888A8' stroke-width='0.8' opacity='0.7'/%3E%3Ccircle cx='16' cy='16' r='11' fill='none' stroke='%238888A8' stroke-width='0.8' opacity='0.5'/%3E%3Ccircle cx='16' cy='16' r='2.2' fill='%2300F5A0' opacity='0.85'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;700&family=Inter:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=Inter:wght@400;500&display=swap" rel="stylesheet" />
 
   <style>
-    /* ─────────────────────────────────────────────────
-       DESIGN TOKENS — every colour lives here once.
-       All other rules reference these variables so a
-       palette swap is a one-line change.
-    ───────────────────────────────────────────────── */
+    /* ═══════════════════════════════════════
+       DESIGN TOKENS
+    ═══════════════════════════════════════ */
     :root {
-      --color-bg:             #0D0D0D;
-      --color-surface:        #1A1A2E;
-      --color-mint:           #00F5A0;
-      --color-amber:          #F5A623;
-      --color-red:            #FF4D4D;
-      --color-text-primary:   #E8E8F0;
-      --color-text-secondary: #8888A8;
-
-      /* Derived / UI tokens */
-      --card-border:          var(--color-text-secondary);
-      --card-border-width:    2px;
-
-      /* Typography scale */
+      --color-bg:           #0A0A12;
+      --color-mint:         #00F5A0;
+      --color-amber:        #F5A623;
+      --color-red:          #FF4D4D;
+      --color-text-primary: #E8E8F0;
       --font-display: 'Space Grotesk', sans-serif;
       --font-body:    'Inter', sans-serif;
-
-      /* Spacing rhythm */
-      --space-xs:  0.375rem;
-      --space-sm:  0.75rem;
-      --space-md:  1.25rem;
-      --space-lg:  2rem;
-      --space-xl:  3rem;
     }
 
-    /* ─────────────────────────────────────────────────
-       RESET & BASE
-    ───────────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     html, body {
@@ -49,890 +31,1038 @@
       background: var(--color-bg);
       color: var(--color-text-primary);
       font-family: var(--font-body);
-      overflow: hidden;           /* canvas handles all scrolling */
+      overflow: hidden;
       -webkit-tap-highlight-color: transparent;
     }
 
-    /* ─────────────────────────────────────────────────
-       THREE.JS CANVAS — fixed, full-screen, behind UI
-    ───────────────────────────────────────────────── */
-    #bg {
+    body::before {
+      content: ''; position: fixed; inset: 0; z-index: 0;
+      background:
+        radial-gradient(ellipse 55% 45% at 15% 25%, rgba(80,80,200,0.03) 0%, transparent 65%),
+        radial-gradient(ellipse 45% 55% at 85% 75%, rgba(0,180,120,0.02) 0%, transparent 65%);
+      pointer-events: none;
+    }
+
+    /* Canvas layers */
+    #bg-names    { position:fixed; inset:0; z-index:0; pointer-events:none; display:block; }
+    #burst-canvas{ position:fixed; inset:0; z-index:20; pointer-events:none; display:block; }
+
+    /* Country name pop — appears at click point and flies upward */
+    #country-pop {
       position: fixed;
-      inset: 0;
-      z-index: 0;
-      display: block;
-    }
-
-    /* ─────────────────────────────────────────────────
-       APP WRAPPER — fills viewport, centres the card
-    ───────────────────────────────────────────────── */
-    #app {
-      position: fixed;
-      inset: 0;
-      z-index: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: stretch;          /* card stretches full width */
-      justify-content: flex-start;   /* pin to the top */
-      padding: var(--space-md);
-    }
-
-    /* ─────────────────────────────────────────────────
-       GAME CARD — semi-transparent so WebGL shows through
-    ───────────────────────────────────────────────── */
-    .card {
-      width: 100%;
-      min-width: 0;
-      max-width: none;               /* span the full available width */
-      background: rgba(13, 13, 20, 0.35);
-      backdrop-filter: blur(6px) saturate(1.1);
-      -webkit-backdrop-filter: blur(6px) saturate(1.1);
-      border: var(--card-border-width) solid var(--card-border);
-      border-radius: 16px;
-      padding: var(--space-sm) var(--space-lg);
-      display: flex;
-      flex-direction: row;           /* horizontal layout */
-      align-items: center;
-      gap: var(--space-lg);
-      flex-wrap: wrap;               /* gracefully wraps on very small screens */
-      transition:
-        border-color 0.35s ease,
-        box-shadow   0.35s ease;
-    }
-
-    /* State-driven border colours */
-    .card[data-state="react"]   { border-color: var(--color-mint);  box-shadow: 0 0 32px rgba(0,245,160,0.25); }
-    .card[data-state="result"]  { border-color: var(--color-mint);  box-shadow: 0 0 24px rgba(0,245,160,0.15); }
-    .card[data-state="ready"]   { border-color: var(--color-amber); box-shadow: 0 0 24px rgba(245,166,35,0.20); }
-    .card[data-state="waiting"] { border-color: var(--color-amber); }
-    .card[data-state="early"]   { border-color: var(--color-red);   box-shadow: 0 0 28px rgba(255,77,77,0.30); }
-
-    /* ─────────────────────────────────────────────────
-       HEADER
-    ───────────────────────────────────────────────── */
-    .header {
-      text-align: left;
-      flex-shrink: 0;
-    }
-
-    .header h1 {
+      z-index: 25;
+      pointer-events: none;
       font-family: var(--font-display);
       font-weight: 700;
-      font-size: clamp(1rem, 2.5vw, 1.3rem);
-      letter-spacing: -0.02em;
-      color: var(--color-text-primary);
-      line-height: 1.1;
-      white-space: nowrap;
-    }
-
-    .header p {
-      font-size: clamp(0.65rem, 1.5vw, 0.75rem);
-      color: var(--color-text-secondary);
-      margin-top: 2px;
-      white-space: nowrap;
-    }
-
-    /* ─────────────────────────────────────────────────
-       STIMULUS AREA — the "press zone"
-    ───────────────────────────────────────────────── */
-    #stimulus-area {
-      flex: 1;                       /* takes remaining space in the row */
-      min-width: 160px;
-      min-height: 60px;
-      display: flex;
-      flex-direction: row;
-      align-items: center;
-      justify-content: center;
-      gap: var(--space-sm);
-      border-radius: 10px;
-      cursor: default;
-      user-select: none;
-      transition:
-        background 0.25s ease,
-        transform  0.1s ease;
-    }
-
-    #stimulus-area:active { transform: scale(0.98); }
-
-    /* Active game states make the stimulus area clickable */
-    #stimulus-area[data-clickable="true"] {
-      cursor: pointer;
-    }
-
-    /* State backgrounds */
-    #stimulus-area[data-state="idle"]    { background: rgba(136,136,168,0.04); }
-    #stimulus-area[data-state="waiting"] { background: rgba(245,166,35,0.05); }
-    #stimulus-area[data-state="ready"]   { background: rgba(245,166,35,0.07); }
-    #stimulus-area[data-state="react"]   {
-      background: rgba(0,245,160,0.09);
-      animation: pulse-mint 0.6s ease infinite alternate;
-    }
-    #stimulus-area[data-state="result"]  { background: rgba(0,245,160,0.05); }
-    #stimulus-area[data-state="early"]   {
-      background: rgba(255,77,77,0.09);
-      animation: shake 0.4s ease;
-    }
-
-    @keyframes pulse-mint {
-      from { box-shadow: 0 0 0px rgba(0,245,160,0); }
-      to   { box-shadow: 0 0 28px rgba(0,245,160,0.35); }
-    }
-
-    @keyframes shake {
-      0%,100% { transform: translateX(0); }
-      20%     { transform: translateX(-6px); }
-      40%     { transform: translateX(6px); }
-      60%     { transform: translateX(-4px); }
-      80%     { transform: translateX(4px); }
-    }
-
-    /* ─── State label ─── */
-    #state-label {
-      font-family: var(--font-display);
-      font-weight: 700;
-      font-size: clamp(1rem, 2.5vw, 1.4rem);
+      font-size: clamp(1.1rem, 3vw, 1.6rem);
       letter-spacing: -0.01em;
-      text-align: center;
       white-space: nowrap;
-      transition: color 0.3s ease, opacity 0.3s ease;
+      opacity: 0;
+      text-shadow: 0 0 20px currentColor, 0 0 40px currentColor;
+      transform: translate(-50%, -50%);
     }
 
-    /* ─── Sub-label / instruction ─── */
+    /* ═══════════════════════════════════════
+       SCORE PANEL
+    ═══════════════════════════════════════ */
+    #score-panel {
+      position:fixed; top:1.2rem; right:1.4rem; z-index:10;
+      display:flex; gap:.55rem;
+    }
+    .score-cell {
+      text-align:center;
+      background:rgba(10,10,20,.70);
+      backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+      border:1px solid rgba(255,255,255,.07);
+      border-radius:10px; padding:.4rem .65rem; min-width:52px;
+    }
+    .score-value {
+      font-family:var(--font-display); font-weight:700;
+      font-size:clamp(.88rem,1.9vw,1.05rem);
+      color:var(--color-text-primary); line-height:1;
+      white-space:nowrap; transition:color .35s ease;
+    }
+    .score-value.mint { color:var(--color-mint); }
+    .score-label { font-size:.57rem; color:#44445a; text-transform:uppercase; letter-spacing:.08em; margin-top:3px; }
+
+    /* ═══════════════════════════════════════
+       MAIN LAYOUT
+    ═══════════════════════════════════════ */
+    #app {
+      position:fixed; inset:0; z-index:1;
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      gap:1.3rem; padding:1.5rem;
+    }
+    #title-area { text-align:center; }
+    #title-area h1 {
+      font-family:var(--font-display); font-weight:700;
+      font-size:clamp(1rem,2.8vw,1.4rem); letter-spacing:-.025em;
+    }
+    #title-area p { font-size:clamp(.66rem,1.5vw,.76rem); color:#44445a; margin-top:3px; }
+
+    /* ═══════════════════════════════════════
+       PROGRESS PIPS
+    ═══════════════════════════════════════ */
+    #progress-wrap { width:min(720px,96vw); display:flex; align-items:center; gap:.7rem; }
+    #progress-pips { display:flex; gap:.45rem; flex:1; }
+    .pip {
+      flex:1; height:5px; border-radius:99px;
+      background:rgba(255,255,255,.08);
+      transition:background .35s ease, box-shadow .35s ease;
+    }
+    .pip.done   { background:var(--color-mint); box-shadow:0 0 8px rgba(0,245,160,.5); }
+    .pip.fail   { background:var(--color-red);  box-shadow:0 0 8px rgba(255,77,77,.5); }
+    .pip.active { background:var(--color-amber); box-shadow:0 0 8px rgba(245,166,35,.4); animation:pipPulse .8s ease infinite alternate; }
+    @keyframes pipPulse { from{opacity:.5} to{opacity:1} }
+    #round-label {
+      font-size:.72rem; font-weight:500; color:#44445a;
+      letter-spacing:.06em; text-transform:uppercase; white-space:nowrap; flex-shrink:0;
+    }
+
+    /* ═══════════════════════════════════════
+       STIMULUS BOX
+    ═══════════════════════════════════════ */
+    #stimulus-box {
+      position:relative; width:min(720px,96vw); height:min(460px,92vw);
+      border-radius:28px;
+      background:radial-gradient(ellipse at 50% 42%,rgba(25,25,50,.92) 0%,rgba(8,8,16,.97) 100%);
+      border:1.5px solid rgba(255,255,255,.07); overflow:hidden;
+      display:flex; flex-direction:column; align-items:center; justify-content:flex-end;
+      padding-bottom:1.4rem; cursor:default; user-select:none;
+      transition:border-color .45s ease,box-shadow .45s ease;
+    }
+    #stimulus-box::before, #stimulus-box::after {
+      content:''; position:absolute; width:20px; height:20px;
+      border-color:rgba(255,255,255,.11); border-style:solid; border-radius:2px;
+      z-index:3; pointer-events:none; transition:border-color .45s ease;
+    }
+    #stimulus-box::before { top:13px;    left:13px;  border-width:1.5px 0 0 1.5px; }
+    #stimulus-box::after  { bottom:13px; right:13px; border-width:0 1.5px 1.5px 0; }
+
+    #stimulus-box[data-state="waiting"],
+    #stimulus-box[data-state="ready"]  { border-color:rgba(245,166,35,.35); box-shadow:0 0 55px rgba(245,166,35,.08); }
+    #stimulus-box[data-state="react"]  { border-color:var(--color-mint); box-shadow:0 0 90px rgba(0,245,160,.25),inset 0 0 60px rgba(0,245,160,.06); animation:boxGlow .55s ease infinite alternate; }
+    #stimulus-box[data-state="result"] { border-color:rgba(0,245,160,.32); box-shadow:0 0 45px rgba(0,245,160,.11); }
+    #stimulus-box[data-state="early"]  { border-color:var(--color-red); box-shadow:0 0 65px rgba(255,77,77,.24); animation:shake .42s ease forwards; }
+    #stimulus-box[data-clickable="true"] { cursor:pointer; }
+    #stimulus-box:active { transform:scale(.982); transition:transform .08s ease; }
+
+    @keyframes boxGlow {
+      from { box-shadow:0 0 55px rgba(0,245,160,.14),inset 0 0 30px rgba(0,245,160,.04); }
+      to   { box-shadow:0 0 110px rgba(0,245,160,.34),inset 0 0 70px rgba(0,245,160,.10); }
+    }
+    @keyframes shake {
+      0%,100%{transform:translateX(0)} 18%{transform:translateX(-9px)}
+      36%{transform:translateX(9px)}   54%{transform:translateX(-6px)} 72%{transform:translateX(6px)}
+    }
+
+    #shape-canvas { position:absolute; inset:0; width:100%!important; height:100%!important; z-index:1; display:block; pointer-events:none; }
+
+    #state-label {
+      position:relative; z-index:2; font-family:var(--font-display); font-weight:700;
+      font-size:clamp(1rem,3vw,1.35rem); letter-spacing:-.01em;
+      text-align:center; pointer-events:none; transition:color .3s ease;
+    }
     #sub-label {
-      font-size: clamp(0.65rem, 1.5vw, 0.78rem);
-      color: var(--color-text-secondary);
-      text-align: center;
-      white-space: nowrap;
-      transition: opacity 0.3s ease;
+      position:relative; z-index:2; font-size:clamp(.64rem,1.5vw,.74rem); color:#44445a;
+      text-align:center; margin-top:.22rem; pointer-events:none; transition:color .3s ease;
+    }
+    #reaction-toast {
+      position:absolute; z-index:5; left:50%;
+      bottom:2.8rem; top:auto;           /* anchored to bottom, drifts downward */
+      transform:translateX(-50%);
+      font-family:var(--font-display); font-weight:700;
+      font-size:clamp(1rem,2.8vw,1.4rem); letter-spacing:-.02em;
+      text-align:center; pointer-events:none; opacity:0;
+      white-space:nowrap; text-shadow:0 0 20px currentColor;
     }
 
-    /* ─── Reaction time result — sits above the stats grid ─── */
-    #result-time {
-      font-family: var(--font-display);
-      font-weight: 700;
-      font-size: clamp(1.1rem, 3vw, 1.5rem);
-      color: var(--color-mint);
-      letter-spacing: -0.02em;
-      line-height: 1;
-      text-align: center;
-      white-space: nowrap;
-      display: none;
-      flex-shrink: 0;
-    }
-
-    #result-time.visible { display: block; }
-
-    /* ─────────────────────────────────────────────────
-       STATS GRID — 2×2 on mobile, 4×1 wider
-    ───────────────────────────────────────────────── */
-    .stats-grid {
-      display: flex;
-      flex-direction: row;
-      gap: var(--space-sm);
-      flex-shrink: 0;
-      transition: opacity 0.3s ease;
-    }
-
-    /* No media query needed — always a row in the horizontal bar */
-
-    .stat-cell {
-      background: rgba(255,255,255,0.04);
-      border-radius: 8px;
-      padding: var(--space-xs) var(--space-sm);
-      text-align: center;
-      display: flex;
-      flex-direction: column;
-      gap: 1px;
-      flex-shrink: 0;
-    }
-
-    .stat-value {
-      font-family: var(--font-display);
-      font-weight: 700;
-      font-size: clamp(0.8rem, 1.8vw, 1rem);
-      color: var(--color-text-primary);
-      white-space: nowrap;
-      transition: color 0.3s ease;
-    }
-
-    .stat-value.highlight { color: var(--color-mint); }
-
-    .stat-label {
-      font-size: clamp(0.55rem, 1.2vw, 0.65rem);
-      color: var(--color-text-secondary);
-      font-weight: 500;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      white-space: nowrap;
-    }
-
-    .stat-rounds {
-      /* No special overrides needed — fits naturally in the row */
-    }
-
-    /* ─────────────────────────────────────────────────
-       BUTTONS
-    ───────────────────────────────────────────────── */
+    /* ═══════════════════════════════════════
+       CONTROLS
+    ═══════════════════════════════════════ */
+    #controls { display:flex; gap:.6rem; }
     .btn {
-      font-family: var(--font-body);
-      font-weight: 500;
-      font-size: clamp(0.75rem, 1.8vw, 0.88rem);
-      padding: 0.5em 1.4em;
-      border-radius: 50px;
-      border: 2px solid transparent;
-      cursor: pointer;
-      letter-spacing: 0.03em;
-      white-space: nowrap;
-      flex-shrink: 0;
-      transition:
-        background 0.2s ease,
-        transform  0.1s ease,
-        box-shadow 0.2s ease;
-      -webkit-tap-highlight-color: transparent;
+      font-family:var(--font-body); font-weight:500;
+      font-size:clamp(.78rem,1.8vw,.88rem); padding:.55em 1.7em;
+      border-radius:50px; border:1.5px solid transparent; cursor:pointer;
+      letter-spacing:.02em; white-space:nowrap;
+      transition:background .2s,box-shadow .2s,transform .1s;
+      -webkit-tap-highlight-color:transparent;
+    }
+    .btn:active { transform:scale(.95); }
+    .btn-primary  { background:var(--color-mint); color:#0A0A12; border-color:var(--color-mint); }
+    .btn-primary:hover { box-shadow:0 0 22px rgba(0,245,160,.42); }
+    .btn-secondary { background:transparent; color:#44445a; border-color:rgba(255,255,255,.10); }
+    .btn-secondary:hover { color:var(--color-text-primary); border-color:rgba(255,255,255,.22); }
+    .hidden { display:none !important; }
+
+    /* ═══════════════════════════════════════
+       PULSING TOGGLE BUTTONS
+    ═══════════════════════════════════════ */
+    @keyframes glowAmber {
+      0%,100% { box-shadow:0 0 6px rgba(245,166,35,.30),0 0 14px rgba(245,166,35,.12); border-color:rgba(245,166,35,.35); }
+      50%     { box-shadow:0 0 12px rgba(245,166,35,.60),0 0 28px rgba(245,166,35,.25); border-color:rgba(245,166,35,.65); }
+    }
+    @keyframes glowMint {
+      0%,100% { box-shadow:0 0 6px rgba(0,245,160,.28),0 0 14px rgba(0,245,160,.10); border-color:rgba(0,245,160,.32); }
+      50%     { box-shadow:0 0 12px rgba(0,245,160,.55),0 0 28px rgba(0,245,160,.22); border-color:rgba(0,245,160,.60); }
     }
 
-    .btn:active { transform: scale(0.96); }
-
-    .btn-primary {
-      background: var(--color-mint);
-      color: #0D0D0D;
-      border-color: var(--color-mint);
+    #overlay-toggle {
+      position:fixed; bottom:1.2rem; left:1.4rem; z-index:10;
+      font-family:var(--font-body); font-weight:500; font-size:.72rem;
+      padding:.38em .9em; border-radius:50px; border:1px solid rgba(245,166,35,.35);
+      background:rgba(10,10,20,.70); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+      color:#C08030; cursor:pointer; letter-spacing:.05em; text-transform:uppercase;
+      -webkit-tap-highlight-color:transparent;
+      animation:glowAmber 2.8s ease-in-out infinite; transition:color .2s;
     }
+    #overlay-toggle:hover { color:var(--color-amber); }
 
-    .btn-primary:hover {
-      box-shadow: 0 0 20px rgba(0,245,160,0.4);
+    #theme-toggle {
+      position:fixed; bottom:1.2rem; right:1.4rem; z-index:10;
+      font-family:var(--font-body); font-weight:500; font-size:.72rem;
+      padding:.38em .9em; border-radius:50px; border:1px solid rgba(0,245,160,.32);
+      background:rgba(10,10,20,.70); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+      color:#00A870; cursor:pointer; letter-spacing:.05em; text-transform:uppercase;
+      -webkit-tap-highlight-color:transparent;
+      animation:glowMint 2.8s ease-in-out infinite; animation-delay:-1.4s;
+      transition:color .2s,background .4s;
     }
+    #theme-toggle:hover { color:var(--color-mint); }
 
-    .btn-secondary {
-      background: transparent;
-      color: var(--color-text-secondary);
-      border-color: var(--color-text-secondary);
+    /* ═══════════════════════════════════════
+       END SCREEN
+    ═══════════════════════════════════════ */
+    #end-screen {
+      position:fixed; inset:0; z-index:15;
+      display:flex; align-items:center; justify-content:center; padding:1.5rem;
+      background:rgba(10,10,18,.82);
+      backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
+      opacity:0; pointer-events:none; transition:opacity .5s ease;
     }
-
-    .btn-secondary:hover {
-      color: var(--color-text-primary);
-      border-color: var(--color-text-primary);
+    #end-screen.visible { opacity:1; pointer-events:all; }
+    .end-card {
+      background:rgba(20,20,36,.95); border:1.5px solid rgba(0,245,160,.3);
+      border-radius:24px; padding:2.2rem 2.5rem; max-width:480px; width:100%;
+      text-align:center; box-shadow:0 0 60px rgba(0,245,160,.12);
+      animation:endCardIn .5s cubic-bezier(.34,1.56,.64,1) forwards;
     }
-
-    /* ─────────────────────────────────────────────────
-       ROUND COUNTER BADGE
-    ───────────────────────────────────────────────── */
-    #round-badge {
-      position: absolute;
-      top: var(--space-sm);
-      right: var(--space-md);
-      font-size: 0.72rem;
-      font-weight: 500;
-      color: var(--color-text-secondary);
-      letter-spacing: 0.05em;
+    @keyframes endCardIn {
+      from { transform:scale(.85) translateY(24px); opacity:0; }
+      to   { transform:scale(1)   translateY(0);    opacity:1; }
     }
+    .end-emoji    { font-size:3rem; line-height:1; margin-bottom:.5rem; }
+    .end-title    { font-family:var(--font-display); font-weight:700; font-size:clamp(1.4rem,4vw,2rem); letter-spacing:-.02em; color:var(--color-mint); margin-bottom:.25rem; }
+    .end-subtitle { font-size:.82rem; color:#555577; margin-bottom:1.5rem; }
+    .end-grade    { font-family:var(--font-display); font-weight:700; font-size:clamp(2.2rem,7vw,3.2rem); letter-spacing:-.03em; margin-bottom:1.2rem; }
+    .end-stats    { display:grid; grid-template-columns:1fr 1fr; gap:.65rem; margin-bottom:1.5rem; }
+    .end-stat     { background:rgba(255,255,255,.05); border-radius:12px; padding:.8rem .5rem; }
+    .end-stat-value { font-family:var(--font-display); font-weight:700; font-size:clamp(1.1rem,3vw,1.5rem); color:var(--color-mint); line-height:1; }
+    .end-stat-value.red { color:var(--color-red); }
+    .end-stat-label { font-size:.6rem; color:#555577; text-transform:uppercase; letter-spacing:.07em; margin-top:4px; }
 
-    /* ─────────────────────────────────────────────────
-       UTILITY
-    ───────────────────────────────────────────────── */
-    .hidden { display: none !important; }
-
-    .fade-in {
-      animation: fadeIn 0.3s ease forwards;
+    /* ═══════════════════════════════════════
+       LIGHT MODE
+    ═══════════════════════════════════════ */
+    body.light {
+      --color-bg:           #B8D4E8;
+      --color-mint:         #00A86B;
+      --color-amber:        #C47A00;
+      --color-red:          #D93030;
+      --color-text-primary: #1A1A2E;
+      background:var(--color-bg); color:var(--color-text-primary);
     }
-
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(6px); }
-      to   { opacity: 1; transform: translateY(0); }
+    body.light::before {
+      background:
+        radial-gradient(ellipse 55% 45% at 15% 25%,rgba(120,100,220,.05) 0%,transparent 65%),
+        radial-gradient(ellipse 45% 55% at 85% 75%,rgba(0,140,100,.04) 0%,transparent 65%);
     }
+    body.light .score-cell    { background:rgba(184,212,232,.75); border-color:rgba(0,0,0,.08); }
+    body.light .score-label   { color:#9090AA; }
+    body.light #round-label   { color:#9090AA; }
+    body.light .pip           { background:rgba(0,0,0,.08); }
+    body.light #title-area p  { color:#9090AA; }
+    body.light #sub-label     { color:#9090AA; }
+    body.light #stimulus-box  {
+      background:radial-gradient(ellipse at 50% 42%,rgba(180,210,230,.88) 0%,rgba(160,195,220,.95) 100%);
+      border-color:rgba(0,0,0,.08);
+    }
+    body.light #stimulus-box::before,
+    body.light #stimulus-box::after { border-color:rgba(0,0,0,.15); }
+    body.light .btn-primary   { background:var(--color-mint); border-color:var(--color-mint); color:#fff; }
+    body.light .btn-secondary { color:#9090AA; border-color:rgba(0,0,0,.12); }
+    body.light .btn-secondary:hover { color:var(--color-text-primary); border-color:rgba(0,0,0,.25); }
+    body.light #overlay-toggle { background:rgba(184,212,232,.80); color:#A06010; }
+    body.light #theme-toggle   { background:rgba(184,212,232,.80); color:#007A50; }
+    body.light #end-screen     { background:rgba(140,185,215,.85); }
+    body.light .end-card       { background:rgba(200,225,240,.97); border-color:rgba(0,168,107,.35); }
+    body.light .end-subtitle   { color:#9090AA; }
+    body.light .end-stat       { background:rgba(0,0,0,.04); }
+    body.light .end-stat-label { color:#9090AA; }
   </style>
 </head>
 <body>
 
-  <!-- THREE.JS LAYER: full-screen, behind everything -->
-  <canvas id="bg"></canvas>
+  <canvas id="burst-canvas"></canvas>
+  <div id="country-pop"></div>
 
-  <!-- GAME UI LAYER -->
-  <div id="app">
-    <div class="card" data-state="idle" id="card">
-
-      <div class="header">
-        <h1>Reaction Timer</h1>
-        <p>How fast can you click when the signal fires?</p>
+  <!-- End screen -->
+  <div id="end-screen">
+    <div class="end-card">
+      <div class="end-emoji" id="end-emoji">🌍</div>
+      <div class="end-title"    id="end-title">Session Complete</div>
+      <div class="end-subtitle" id="end-subtitle">Here's how you did</div>
+      <div class="end-grade"    id="end-grade"></div>
+      <div class="end-stats">
+        <div class="end-stat"><div class="end-stat-value"     id="end-best">—</div><div class="end-stat-label">Best time</div></div>
+        <div class="end-stat"><div class="end-stat-value"     id="end-avg">—</div><div class="end-stat-label">Average</div></div>
+        <div class="end-stat"><div class="end-stat-value"     id="end-success">—</div><div class="end-stat-label">Successful</div></div>
+        <div class="end-stat"><div class="end-stat-value red" id="end-fails">—</div><div class="end-stat-label">Early clicks</div></div>
       </div>
-
-      <!-- Clickable stimulus zone -->
-      <div id="stimulus-area" data-state="idle" data-clickable="false" role="button" aria-label="Reaction stimulus area" tabindex="0">
-        <div id="state-label" style="color: var(--color-text-secondary);">Ready?</div>
-        <div id="sub-label">Press Start to begin</div>
-      </div>
-
-      <!-- Reaction time result — shown below stimulus, above stats -->
-      <div id="result-time" aria-live="polite"></div>
-
-      <!-- Session statistics -->
-      <div class="stats-grid" id="stats-grid">
-        <div class="stat-cell">
-          <div class="stat-value" id="stat-last">—</div>
-          <div class="stat-label">Last</div>
-        </div>
-        <div class="stat-cell">
-          <div class="stat-value" id="stat-avg">—</div>
-          <div class="stat-label">Average</div>
-        </div>
-        <div class="stat-cell">
-          <div class="stat-value" id="stat-best">—</div>
-          <div class="stat-label">Best</div>
-        </div>
-        <div class="stat-cell">
-          <div class="stat-value" id="stat-worst">—</div>
-          <div class="stat-label">Worst</div>
-        </div>
-        <div class="stat-cell stat-rounds">
-          <div class="stat-value" id="stat-rounds">0</div>
-          <div class="stat-label">Rounds</div>
-        </div>
-      </div>
-
-      <!-- Action buttons -->
-      <div id="btn-group" style="display:flex; gap:0.5rem; flex-wrap:nowrap; align-items:center; flex-shrink:0;">
-        <button class="btn btn-primary" id="btn-start">Start</button>
-        <button class="btn btn-secondary hidden" id="btn-reset">Reset Stats</button>
-      </div>
-
+      <button class="btn btn-primary" id="btn-play-again" style="width:100%">Play Again</button>
     </div>
   </div>
 
-  <!-- THREE.JS FROM CDN -->
+  <button id="overlay-toggle">● Heavy</button>
+  <button id="theme-toggle">☀ Light</button>
+  <canvas id="bg-names"></canvas>
+
+  <div id="score-panel">
+    <div class="score-cell"><div class="score-value" id="stat-last">—</div><div class="score-label">Last</div></div>
+    <div class="score-cell"><div class="score-value" id="stat-best">—</div><div class="score-label">Best</div></div>
+    <div class="score-cell"><div class="score-value" id="stat-avg">—</div><div class="score-label">Avg</div></div>
+    <div class="score-cell"><div class="score-value" id="stat-rounds">0 / 5</div><div class="score-label">Round</div></div>
+  </div>
+
+  <div id="app">
+    <div id="title-area">
+      <h1>Reaction Timer</h1>
+      <p>Click the instant the shape turns green</p>
+    </div>
+    <div id="progress-wrap">
+      <div id="progress-pips">
+        <div class="pip" id="pip-0"></div>
+        <div class="pip" id="pip-1"></div>
+        <div class="pip" id="pip-2"></div>
+        <div class="pip" id="pip-3"></div>
+        <div class="pip" id="pip-4"></div>
+      </div>
+      <div id="round-label">Round <span id="round-num">0</span> of 5</div>
+    </div>
+    <div id="stimulus-box" data-state="idle" data-clickable="false"
+         role="button" tabindex="0" aria-label="Reaction stimulus area">
+      <canvas id="shape-canvas"></canvas>
+      <div id="reaction-toast"></div>
+      <div id="state-label" style="color:#8888A8">Ready?</div>
+      <div id="sub-label">Press Start</div>
+    </div>
+    <div id="controls">
+      <button class="btn btn-primary"         id="btn-start">Start</button>
+      <button class="btn btn-secondary hidden" id="btn-reset">Reset</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       COUNTRY NAMES BACKGROUND  (self-contained IIFE)
+  ═══════════════════════════════════════════════════════════ -->
+  <script>
+  (function(){
+    'use strict';
+    const bgCanvas=document.getElementById('bg-names');
+    const bgCtx=bgCanvas.getContext('2d');
+
+    const COUNTRIES=['Afghanistan','Albania','Algeria','Andorra','Angola','Argentina','Armenia','Australia','Austria','Azerbaijan','Bahamas','Bahrain','Bangladesh','Belarus','Belgium','Belize','Benin','Bhutan','Bolivia','Bosnia','Botswana','Brazil','Brunei','Bulgaria','Burkina Faso','Burundi','Cambodia','Cameroon','Canada','Chad','Chile','China','Colombia','Comoros','Congo','Croatia','Cuba','Cyprus','Czechia','Denmark','Djibouti','Dominican Rep.','Ecuador','Egypt','El Salvador','Eritrea','Estonia','Ethiopia','Fiji','Finland','France','Gabon','Gambia','Georgia','Germany','Ghana','Greece','Guatemala','Guinea','Guyana','Haiti','Honduras','Hungary','Iceland','India','Indonesia','Iran','Iraq','Ireland','Israel','Italy','Jamaica','Japan','Jordan','Kazakhstan','Kenya','Kuwait','Kyrgyzstan','Laos','Latvia','Lebanon','Lesotho','Liberia','Libya','Liechtenstein','Lithuania','Luxembourg','Madagascar','Malawi','Malaysia','Maldives','Mali','Malta','Mauritania','Mauritius','Mexico','Moldova','Monaco','Mongolia','Montenegro','Morocco','Mozambique','Myanmar','Namibia','Nepal','Netherlands','New Zealand','Nicaragua','Niger','Nigeria','North Korea','Norway','Oman','Pakistan','Panama','Papua New Guinea','Paraguay','Peru','Philippines','Poland','Portugal','Qatar','Romania','Russia','Rwanda','Saudi Arabia','Senegal','Serbia','Sierra Leone','Singapore','Slovakia','Slovenia','Somalia','South Africa','South Korea','South Sudan','Spain','Sri Lanka','Sudan','Suriname','Sweden','Switzerland','Syria','Taiwan','Tajikistan','Tanzania','Thailand','Timor-Leste','Togo','Trinidad','Tunisia','Turkey','Turkmenistan','Uganda','Ukraine','UAE','United Kingdom','United States','Uruguay','Uzbekistan','Venezuela','Vietnam','Yemen','Zambia','Zimbabwe'];
+
+    function rnd(a,b){return a+Math.random()*(b-a);}
+
+    /* makeParticle — spawns from one of the four screen edges and
+       fires inward at a slight diagonal so names travel across the
+       whole viewport rather than just sweeping left-to-right.
+       When `off` is false (initial fill) we place the particle
+       anywhere already on-screen so the background looks populated
+       from the very first frame. */
+    function makeParticle(off){
+      const fs=rnd(10,26), speed=rnd(.20,.70);
+
+      let x,y,vx,vy;
+      if(off){
+        // Pick a random edge: 0=left, 1=right, 2=top, 3=bottom
+        const edge=Math.floor(Math.random()*4);
+        const jitter=rnd(-0.35,0.35); // diagonal offset so they don't all aim at centre
+        if(edge===0){          // from left  → move right
+          x=-130; y=rnd(0,window.innerHeight);
+          vx=speed; vy=speed*jitter;
+        } else if(edge===1){   // from right → move left
+          x=window.innerWidth+130; y=rnd(0,window.innerHeight);
+          vx=-speed; vy=speed*jitter;
+        } else if(edge===2){   // from top   → move down
+          x=rnd(0,window.innerWidth); y=-60;
+          vx=speed*jitter; vy=speed;
+        } else {               // from bottom → move up
+          x=rnd(0,window.innerWidth); y=window.innerHeight+60;
+          vx=speed*jitter; vy=-speed;
+        }
+      } else {
+        // Already on-screen at startup — random direction
+        x=rnd(0,window.innerWidth); y=rnd(0,window.innerHeight);
+        const ang=Math.random()*Math.PI*2;
+        vx=speed*Math.cos(ang); vy=speed*Math.sin(ang);
+      }
+
+      return {
+        text:COUNTRIES[Math.floor(Math.random()*COUNTRIES.length)],
+        x, y, vx, vy,
+        fontSize:fs,
+        opacity:rnd(.12,.32)*(1-(fs-10)/24),
+        rotation:rnd(-15,15)*(Math.PI/180),
+        wobbleAmp:rnd(.3,1.4), wobbleFreq:rnd(.25,.85), wobblePhase:rnd(0,Math.PI*2),
+        hue:Math.random()<.12?'mint':Math.random()<.08?'amber':'slate',
+      };
+    }
+
+    /* 90 particles fills the screen visibly without crowding */
+    let particles=Array.from({length:90},()=>makeParticle(false));
+    function resize(){ bgCanvas.width=window.innerWidth; bgCanvas.height=window.innerHeight; }
+    window.addEventListener('resize',resize); resize();
+
+    function particleColor(p){
+      const L=document.body.classList.contains('light');
+      let r,g,b,sr,sg,sb;
+      try{
+        const s=(typeof state!=='undefined')?state:'idle';
+        if(p.hue==='mint'||s==='react')
+          {r=0;g=L?140:220;b=L?90:150;sr=0;sg=L?160:255;sb=L?100:160;}
+        else if(p.hue==='amber'||s==='waiting'||s==='ready')
+          {r=L?160:230;g=L?100:160;b=L?0:50;sr=L?180:255;sg=L?120:180;sb=30;}
+        else if(s==='early')
+          {r=L?180:220;g=L?40:80;b=L?40:80;sr=L?200:255;sg=60;sb=60;}
+        else
+          {r=L?80:110;g=L?80:115;b=L?140:160;sr=100;sg=110;sb=L?180:200;}
+      }catch(e){r=110;g=115;b=160;sr=100;sg=110;sb=200;}
+      return {fill:`rgba(${r},${g},${b},${p.opacity})`,shadow:`rgba(${sr},${sg},${sb},${Math.min(p.opacity*8,.90)})`};
+    }
+
+    let lastT=performance.now();
+    function drawBg(now){
+      requestAnimationFrame(drawBg);
+      const dt=Math.min((now-lastT)/1000,.05); lastT=now; const t=now/1000;
+      const L=document.body.classList.contains('light');
+      const a=window._overlayAlpha??0.92;
+      bgCtx.fillStyle=L?`rgba(184,212,232,${a})`:`rgba(10,10,18,${a})`;
+      bgCtx.fillRect(0,0,bgCanvas.width,bgCanvas.height);
+      particles.forEach(p=>{
+        p.x+=p.vx;
+        p.y+=p.vy+Math.sin(t*p.wobbleFreq*Math.PI*2+p.wobblePhase)*p.wobbleAmp*dt;
+
+        /* Recycle when the particle exits any of the four edges.
+           Pass true so it respawns off a random edge pointing inward. */
+        const W=bgCanvas.width, H=bgCanvas.height;
+        if(p.x<-140 || p.x>W+140 || p.y<-80 || p.y>H+80)
+          Object.assign(p,makeParticle(true));
+        bgCtx.save();
+        bgCtx.translate(p.x,p.y); bgCtx.rotate(p.rotation);
+        bgCtx.font=`${p.fontSize}px 'Space Grotesk',sans-serif`;
+        bgCtx.textAlign='center'; bgCtx.textBaseline='middle';
+        const c=particleColor(p);
+        bgCtx.shadowColor=c.shadow;
+        bgCtx.shadowBlur=p.fontSize*5;  bgCtx.fillStyle=c.fill; bgCtx.fillText(p.text,0,0);
+        bgCtx.shadowBlur=p.fontSize*2.2; bgCtx.fillText(p.text,0,0);
+        bgCtx.shadowBlur=p.fontSize*.6;  bgCtx.fillText(p.text,0,0);
+        bgCtx.shadowBlur=0; bgCtx.shadowColor='transparent';
+        bgCtx.restore();
+      });
+    }
+    requestAnimationFrame(drawBg);
+
+    // Overlay toggle
+    const OL=[{label:'● Heavy',alpha:.92},{label:'◑ Medium',alpha:.78},{label:'○ Light',alpha:.55}];
+    let oi=0; window._overlayAlpha=OL[0].alpha;
+    document.getElementById('overlay-toggle').addEventListener('click',function(){
+      oi=(oi+1)%OL.length; window._overlayAlpha=OL[oi].alpha; this.textContent=OL[oi].label;
+    });
+
+    // Theme toggle
+    let lm=false;
+    document.getElementById('theme-toggle').addEventListener('click',function(){
+      lm=!lm; document.body.classList.toggle('light',lm);
+      this.textContent=lm?'☾ Dark':'☀ Light';
+      window._lightMode=lm;
+      if(typeof window._applyThemeToGlobe==='function') window._applyThemeToGlobe(lm);
+    });
+  })();
+  </script>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
   <script>
-    /* ══════════════════════════════════════════════════════════════════
-     *  ARCHITECTURE OVERVIEW
-     * ══════════════════════════════════════════════════════════════════
-     *
-     *  STATE MACHINE PATTERN
-     *  ─────────────────────
-     *  All application state lives in a single `state` string variable.
-     *  The `setState(newState)` function is the ONLY place that mutates
-     *  this variable. It then calls two targeted update functions:
-     *
-     *    updateUI(newState)      — syncs DOM classes, text, visibility
-     *    updateScene(newState)   — syncs Three.js colour/speed targets
-     *
-     *  No event handler, timeout, or animation frame mutates the DOM or
-     *  scene directly. They call setState() and let the machine drive.
-     *  This makes each state transition deterministic, debuggable, and
-     *  easy to extend — adding a new state means adding one case to each
-     *  switch block rather than hunting through scattered callbacks.
-     *
-     *  THREE.JS / ANIMATION LOOP SEPARATION
-     *  ─────────────────────────────────────
-     *  The requestAnimationFrame loop (animate()) is purely visual. It
-     *  reads `targetColor`, `targetSpeed`, and `targetScale` — three
-     *  lerp targets that setState() updates — and moves toward them each
-     *  frame. The loop has zero knowledge of timers, user intent, or
-     *  game logic. This separation means the visual layer is robust even
-     *  if game logic is paused, errors, or runs slowly.
-     *
-     *  TIMING ACCURACY
-     *  ────────────────
-     *  We use performance.now() exclusively. Unlike Date.now(), which
-     *  rounds to 1 ms (or more in some browsers), performance.now()
-     *  gives sub-millisecond resolution and is immune to system clock
-     *  changes. The start timestamp is captured the instant the "react"
-     *  state fires; the end timestamp is captured in the pointerdown
-     *  event handler; the delta is the reaction time.
-     *
-     *  EARLY CLICK DETECTION
-     *  ──────────────────────
-     *  During `waiting` and `ready` states the stimulus area is
-     *  listening for clicks/taps. If a pointer event fires in those
-     *  states, setState('early') is called immediately, cancelling the
-     *  pending timeout and restarting after a short delay — never
-     *  recording a time for that round.
-     *
-     *  RESPONSIVE THREE.JS
-     *  ────────────────────
-     *  A ResizeObserver on <body> calls renderer.setSize() and updates
-     *  camera.aspect whenever the viewport changes, ensuring the WebGL
-     *  canvas always fills the screen correctly on all devices.
-     * ══════════════════════════════════════════════════════════════════
-     */
+  /* ═══════════════════════════════════════════════════════════════
+   *  GAME SCRIPT
+   *
+   *  Key architectural points:
+   *  1. Single `state` string; all changes through setState().
+   *  2. Explosion variables declared BEFORE animate() to avoid the
+   *     temporal dead zone — `let` is hoisted but not initialised,
+   *     so reading it before the declaration throws ReferenceError.
+   *  3. Fragment vertices are centroid-relative so mesh.position
+   *     movement actually moves the geometry correctly.
+   *  4. performance.now() stamped at setState('react') and read at
+   *     setState('result') in the same JS task for accurate timing.
+   * ═══════════════════════════════════════════════════════════════
+   */
+  'use strict';
 
-    'use strict';
+  // DOM refs
+  const stimBox      =document.getElementById('stimulus-box');
+  const shapeCanvas  =document.getElementById('shape-canvas');
+  const stateLabel   =document.getElementById('state-label');
+  const subLabel     =document.getElementById('sub-label');
+  const btnStart     =document.getElementById('btn-start');
+  const btnReset     =document.getElementById('btn-reset');
+  const btnPlayAgain =document.getElementById('btn-play-again');
+  const statLast     =document.getElementById('stat-last');
+  const statBest     =document.getElementById('stat-best');
+  const statAvg      =document.getElementById('stat-avg');
+  const statRounds   =document.getElementById('stat-rounds');
+  const roundNum     =document.getElementById('round-num');
+  const reactionToast=document.getElementById('reaction-toast');
+  const endScreen    =document.getElementById('end-screen');
+  const endEmoji     =document.getElementById('end-emoji');
+  const endTitle     =document.getElementById('end-title');
+  const endSubtitle  =document.getElementById('end-subtitle');
+  const endGrade     =document.getElementById('end-grade');
+  const endBest      =document.getElementById('end-best');
+  const endAvg       =document.getElementById('end-avg');
+  const endSuccess   =document.getElementById('end-success');
+  const endFails     =document.getElementById('end-fails');
+  const burstCanvas  =document.getElementById('burst-canvas');
+  const burstCtx     =burstCanvas.getContext('2d');
+  const pips         =[0,1,2,3,4].map(i=>document.getElementById(`pip-${i}`));
 
-    /* ──────────────────────────────────────────────────────────────────
-     *  1. THREE.JS SCENE SETUP
-     * ────────────────────────────────────────────────────────────────── */
+  function resizeBurst(){ burstCanvas.width=window.innerWidth; burstCanvas.height=window.innerHeight; }
+  window.addEventListener('resize',resizeBurst); resizeBurst();
 
-    const canvas = document.getElementById('bg');
+  const TOTAL_ROUNDS=5;
+  let state='idle', reactionStart=0, waitTimeout=null;
+  const stats={times:[],rounds:0,fails:0,currentRound:0,pipStatus:[]};
 
-    // Renderer: alpha=true keeps the canvas transparent where no objects
-    // are rendered, letting the CSS body background show through.
-    const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setSize(window.innerWidth, window.innerHeight);
+  // Explosion state — MUST be before animate() call
+  const EXPLODE_DURATION=2200;
+  let fragments=[], exploding=false, explodeStartTime=0;
 
-    const scene = new THREE.Scene();
+  /* ═══════════════════════════════════════
+     THREE.JS
+  ═══════════════════════════════════════ */
+  const renderer=new THREE.WebGLRenderer({canvas:shapeCanvas,antialias:true,alpha:true});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
 
-    // Perspective camera: moderate FOV feels natural, not fisheye.
-    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
-    camera.position.z = 14;
+  function fitRenderer(){
+    const w=stimBox.clientWidth,h=stimBox.clientHeight;
+    renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix();
+  }
 
-    // ── Lighting ──
-    // AmbientLight ensures no face is completely black; PointLight gives
-    // the specularity that makes MeshPhongMaterial feel three-dimensional.
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
-    scene.add(ambientLight);
+  const scene=new THREE.Scene();
+  const camera=new THREE.PerspectiveCamera(42,1,.1,100);
+  camera.position.set(0,0,4.2);
 
-    const pointLight = new THREE.PointLight(0xffffff, 1.8, 60);
-    pointLight.position.set(8, 10, 10);
-    scene.add(pointLight);
+  const ambientLight=new THREE.AmbientLight(0x112244,.8); scene.add(ambientLight);
+  const sunLight=new THREE.PointLight(0xffffff,1.4,40); sunLight.position.set(5,4,6); scene.add(sunLight);
+  const rimLight=new THREE.PointLight(0x8888A8,2.0,20); rimLight.position.set(-4,-2,-3); scene.add(rimLight);
 
-    // Secondary fill light from below-left for colour variation on faces
-    const fillLight = new THREE.PointLight(0x8888ff, 0.6, 40);
-    fillLight.position.set(-8, -6, 6);
-    scene.add(fillLight);
+  const R=1.0;
 
-    // ── Geometry catalogue ──
-    // Three shape types chosen for their visual variety:
-    //   TorusKnot   — complex, organic; looks great spinning
-    //   Icosahedron — geometric, crystalline; subtle facets
-    //   Octahedron  — clean diamond; rotates symmetrically
-    const geometries = [
-      new THREE.TorusKnotGeometry(0.65, 0.22, 90, 14),
-      new THREE.IcosahedronGeometry(0.80, 1),
-      new THREE.OctahedronGeometry(0.90, 0),
-      new THREE.TorusKnotGeometry(0.50, 0.16, 80, 12),
-      new THREE.IcosahedronGeometry(0.60, 0),
-      new THREE.OctahedronGeometry(0.70, 0),
-      new THREE.TorusKnotGeometry(0.75, 0.18, 100, 14),
-    ];
+  // Core glow
+  const coreMat=new THREE.MeshStandardMaterial({color:new THREE.Color('#8888A8'),emissive:new THREE.Color('#8888A8'),emissiveIntensity:1.2,roughness:1,metalness:0,transparent:true,opacity:.55});
+  const core=new THREE.Mesh(new THREE.SphereGeometry(R*.88,32,32),coreMat); scene.add(core);
 
-    // Shared material — one instance, colour updated globally each frame
-    // via lerping `currentColor` toward `targetColor`.
-    // We use MeshPhongMaterial: shininess gives a nice specular highlight
-    // that makes colour transitions more dramatic (the mint glow pops).
-    const shapeMaterial = new THREE.MeshPhongMaterial({
-      color:     new THREE.Color('#8888A8'),
-      shininess: 55,
-      specular:  new THREE.Color(0x444466),
-    });
+  // World map texture
+  const MAP_W=2048,MAP_H=1024;
+  const mapCv=document.createElement('canvas'); mapCv.width=MAP_W; mapCv.height=MAP_H;
+  const mc=mapCv.getContext('2d');
+  function ll2xy(lon,lat){return[((lon+180)/360)*MAP_W,((90-lat)/180)*MAP_H];}
+  function dl(coords){
+    if(coords.length<2)return;
+    mc.beginPath(); const[sx,sy]=ll2xy(coords[0][0],coords[0][1]); mc.moveTo(sx,sy);
+    for(let i=1;i<coords.length;i++){const[x,y]=ll2xy(coords[i][0],coords[i][1]);mc.lineTo(x,y);}
+    mc.closePath(); mc.fill(); mc.stroke();
+  }
+  function drawMap(light){
+    mc.fillStyle=light?'#c8d8e8':'#0a0a1a'; mc.fillRect(0,0,MAP_W,MAP_H);
+    mc.fillStyle  =light?'rgba(90,110,160,.85)':'rgba(80,90,130,.90)';
+    mc.strokeStyle=light?'rgba(60,80,160,.55)' :'rgba(140,160,220,.60)';
+    mc.lineWidth=1.2;
+    dl([[-168,72],[-140,72],[-120,78],[-85,80],[-65,82],[-60,78],[-65,68],[-55,58],[-53,47],[-56,45],[-65,44],[-70,43],[-76,35],[-80,25],[-88,15],[-83,10],[-77,8],[-78,12],[-85,11],[-90,14],[-92,18],[-88,22],[-87,26],[-97,22],[-105,20],[-108,24],[-110,24],[-117,29],[-118,34],[-122,37],[-124,40],[-124,48],[-130,55],[-135,58],[-145,62],[-152,60],[-158,58],[-162,62],[-165,64],[-168,68],[-168,72]]);
+    dl([[-44,83],[-20,83],[-18,77],[-22,72],[-30,70],[-42,65],[-52,65],[-56,68],[-54,74],[-44,78],[-44,83]]);
+    dl([[-80,12],[-76,8],[-62,12],[-60,8],[-50,2],[-48,-2],[-35,-6],[-35,-10],[-38,-14],[-40,-20],[-44,-24],[-48,-28],[-52,-33],[-57,-38],[-62,-42],[-66,-46],[-66,-52],[-68,-55],[-64,-54],[-68,-50],[-66,-44],[-58,-40],[-52,-34],[-48,-28],[-40,-22],[-38,-14],[-34,-8],[-35,0],[-48,0],[-58,4],[-62,8],[-70,12],[-80,12]]);
+    dl([[-10,36],[-8,38],[-6,44],[-2,46],[2,46],[2,52],[4,53],[8,54],[10,56],[14,58],[18,60],[22,60],[26,62],[28,60],[30,62],[28,56],[24,56],[22,54],[20,50],[16,48],[14,46],[14,42],[18,40],[20,38],[16,36],[12,38],[8,40],[4,40],[0,40],[-4,38],[-8,36],[-10,36]]);
+    dl([[4,58],[6,58],[8,60],[10,62],[12,64],[14,66],[16,68],[20,70],[26,72],[28,72],[30,70],[28,66],[26,64],[24,62],[22,60],[20,58],[18,58],[16,58],[14,58],[10,57],[8,56],[6,56],[4,58]]);
+    dl([[-6,36],[2,36],[10,38],[14,38],[22,36],[30,32],[34,28],[36,22],[42,12],[44,8],[42,2],[40,-4],[40,-10],[36,-18],[36,-24],[32,-28],[28,-32],[26,-34],[20,-36],[16,-34],[14,-28],[12,-22],[10,-16],[8,-4],[2,4],[-4,4],[-10,8],[-16,12],[-16,20],[-12,24],[-6,26],[-4,30],[-2,34],[-6,36]]);
+    dl([[26,72],[32,70],[40,70],[50,72],[60,72],[68,74],[80,74],[100,72],[110,70],[120,70],[130,68],[138,64],[140,60],[138,54],[132,48],[128,42],[122,38],[120,34],[118,28],[108,22],[104,20],[100,16],[96,18],[92,22],[86,26],[80,28],[74,22],[68,24],[62,22],[56,24],[50,28],[44,28],[38,22],[36,14],[40,8],[44,12],[48,14],[52,18],[56,22],[60,22],[64,18],[66,24],[70,28],[72,34],[68,38],[60,40],[54,42],[50,46],[48,52],[52,56],[58,60],[60,62],[64,66],[68,68],[72,72],[80,74],[26,72]]);
+    dl([[62,22],[68,24],[72,22],[76,20],[80,14],[80,8],[78,8],[76,10],[72,18],[68,22],[62,22]]);
+    dl([[100,20],[104,18],[104,14],[102,4],[100,4],[98,8],[98,14],[100,20]]);
+    dl([[130,32],[132,34],[134,36],[136,38],[138,40],[140,42],[142,44],[144,44],[144,42],[142,40],[140,38],[138,36],[136,34],[134,32],[130,32]]);
+    dl([[114,-22],[116,-20],[122,-18],[126,-14],[130,-12],[136,-12],[138,-14],[140,-18],[142,-20],[146,-18],[150,-24],[152,-28],[154,-30],[152,-34],[148,-38],[144,-38],[140,-36],[136,-34],[132,-32],[128,-32],[124,-34],[118,-34],[116,-30],[114,-26],[114,-22]]);
+    dl([[166,-46],[168,-44],[170,-42],[172,-42],[172,-44],[170,-46],[168,-46],[166,-46]]);
+    mc.strokeStyle='rgba(120,140,200,.15)'; mc.lineWidth=.8;
+    mc.beginPath(); mc.moveTo(0,MAP_H/2); mc.lineTo(MAP_W,MAP_H/2); mc.stroke();
+    const[,tY]=ll2xy(0,23.5);  mc.beginPath(); mc.moveTo(0,tY); mc.lineTo(MAP_W,tY); mc.stroke();
+    const[,ttY]=ll2xy(0,-23.5);mc.beginPath(); mc.moveTo(0,ttY);mc.lineTo(MAP_W,ttY);mc.stroke();
+  }
+  drawMap(false);
+  const mapTex=new THREE.CanvasTexture(mapCv);
+  const globeMat=new THREE.MeshStandardMaterial({map:mapTex,emissive:new THREE.Color('#8888A8'),emissiveIntensity:.18,emissiveMap:mapTex,roughness:.65,metalness:.10,transparent:true,opacity:.92});
+  const globe=new THREE.Mesh(new THREE.SphereGeometry(R,64,64),globeMat); scene.add(globe);
 
-    // Build the mesh array, scattered across the scene
-    const meshes = [];
-    const SHAPE_COUNT = 7;
+  // Wireframe
+  const wireMat=new THREE.MeshBasicMaterial({color:new THREE.Color('#8888A8'),wireframe:true,transparent:true,opacity:.10});
+  const wire=new THREE.Mesh(new THREE.SphereGeometry(R*1.02,10,7),wireMat); scene.add(wire);
 
-    geometries.forEach((geo, i) => {
-      // Each shape shares the same material (colour update is global)
-      // but has independent position, scale, and rotation velocity.
-      const mesh = new THREE.Mesh(geo, shapeMaterial.clone());
+  // Halo
+  const haloMat=new THREE.MeshStandardMaterial({color:new THREE.Color('#8888A8'),emissive:new THREE.Color('#8888A8'),emissiveIntensity:.9,side:THREE.BackSide,blending:THREE.AdditiveBlending,transparent:true,opacity:.22,depthWrite:false});
+  const halo=new THREE.Mesh(new THREE.SphereGeometry(R*1.28,32,32),haloMat); scene.add(halo);
 
-      // Distribute shapes in a rough hemisphere in front of the camera
-      const angle  = (i / SHAPE_COUNT) * Math.PI * 2;
-      const radius = 4.5 + (i % 3) * 1.8;
-      const depth  = -1 + (i % 4) * 0.6;
+  window._applyThemeToGlobe=function(light){
+    globeMat.opacity=light?.96:.92;
+    ambientLight.intensity=light?1.4:.8;
+    sunLight.intensity=light?2.2:1.4;
+    haloMat.opacity=light?.12:.22;
+    haloMat.emissiveIntensity=light?.4:.9;
+    drawMap(light); mapTex.needsUpdate=true;
+  };
 
-      mesh.position.set(
-        Math.cos(angle) * radius * 0.9,
-        Math.sin(angle) * radius * 0.55,
-        depth
-      );
+  // Lerp targets
+  const currentColor=new THREE.Color('#8888A8'), targetColor=new THREE.Color('#8888A8');
+  let currentSpeed=1,targetSpeed=1,currentScale=1,targetScale=1;
+  let glowFlash=0,targetGlow=0,currentGlow=0;
+  function triggerFlash(){glowFlash=1.0;}
 
-      // Randomise initial rotation so they don't all face the same way
-      mesh.rotation.set(
-        Math.random() * Math.PI,
-        Math.random() * Math.PI,
-        Math.random() * Math.PI
-      );
+  const STATE_COLORS={idle:'#8888A8',waiting:'#C08818',ready:'#F5A623',react:'#00F5A0',result:'#38C88A',early:'#FF4D4D'};
+  const STATE_SPEEDS={idle:.3,waiting:.7,ready:1.6,react:4.5,result:1.0,early:3.5};
+  const STATE_SCALES={idle:1,waiting:1,ready:1.04,react:1.14,result:1.04,early:1.10};
+  const STATE_GLOWS ={idle:0,waiting:.35,ready:.55,react:.85,result:.50,early:.40};
 
-      // Store per-mesh animation data as user data
-      mesh.userData = {
-        rotVel:   new THREE.Vector3(
-          (Math.random() - 0.5) * 0.008,
-          (Math.random() - 0.5) * 0.008,
-          (Math.random() - 0.5) * 0.005
-        ),
-        baseScale:    0.75 + Math.random() * 0.55,
-        scaleOffset:  Math.random() * Math.PI * 2,  // phase for breathing
-        floatOffset:  Math.random() * Math.PI * 2,  // phase for drift
-        floatAmp:     0.06 + Math.random() * 0.06,
-      };
+  const clock=new THREE.Clock();
+  function animate(){
+    requestAnimationFrame(animate);
+    const delta=clock.getDelta(),t=clock.getElapsedTime();
+    const k=1-Math.exp(-6*delta);
+    currentSpeed+=(targetSpeed-currentSpeed)*k;
+    currentScale+=(targetScale-currentScale)*k;
+    currentColor.lerp(targetColor,k*1.4);
+    currentGlow +=(targetGlow-currentGlow)*k;
+    glowFlash   *=Math.exp(-3.5*delta);
+    const glow=currentGlow+glowFlash;
+    const pulse=.5+.5*Math.sin(t*(1.2+currentSpeed*.3));
 
-      mesh.scale.setScalar(mesh.userData.baseScale);
-      meshes.push(mesh);
-      scene.add(mesh);
-    });
+    coreMat.color.copy(currentColor); coreMat.emissive.copy(currentColor);
+    coreMat.emissiveIntensity=.5+pulse*.6+glow*2.2;
+    globeMat.emissive.copy(currentColor); globeMat.emissiveIntensity=.08+pulse*.10+glow*.55;
+    wireMat.color.copy(currentColor); wireMat.opacity=.06+pulse*.05+glow*.18;
+    haloMat.color.copy(currentColor); haloMat.emissive.copy(currentColor);
+    haloMat.opacity=.12+pulse*.14+glow*.38; haloMat.emissiveIntensity=.6+pulse*.4+glow*1.2;
+    rimLight.color.copy(currentColor); rimLight.intensity=1.2+pulse*.6+glow*3.5;
+    sunLight.intensity=1.4+glow*1.2;
 
-    // ── Scene lerp targets ──
-    // The animation loop moves TOWARD these values each frame.
-    // setState() sets them; the loop reads them.
-    const currentColor = new THREE.Color('#8888A8');
-    const targetColor  = new THREE.Color('#8888A8');
-    let   targetSpeed  = 1.0;   // multiplier on rotation velocity
-    let   currentSpeed = 1.0;
-    let   targetScale  = 1.0;   // multiplier on base scale
-    let   currentScale = 1.0;
+    globe.rotation.y+=.004*currentSpeed; wire.rotation.y+=.004*currentSpeed;
+    wire.rotation.x+=.001*currentSpeed;  core.rotation.y+=.006*currentSpeed; core.rotation.x+=.003*currentSpeed;
+    const breathe=1+Math.sin(t*1.1)*.018, s=(currentScale+glowFlash*.06)*breathe;
+    globe.scale.setScalar(s); wire.scale.setScalar(s); core.scale.setScalar(s); halo.scale.setScalar(s);
 
-    // Per-state Three.js colour targets (matches design spec)
-    const STATE_COLORS = {
-      idle:    '#8888A8',
-      waiting: '#C48A1A',   // amber at low saturation
-      ready:   '#F5A623',   // amber brightening
-      react:   '#00F5A0',   // electric mint
-      result:  '#44C490',   // mint fading back toward slate
-      early:   '#FF4D4D',   // signal red
-    };
-
-    const STATE_SPEEDS = {
-      idle:    1.0,
-      waiting: 1.2,
-      ready:   2.2,
-      react:   7.0,    // dramatic spin-up
-      result:  1.6,
-      early:   4.0,    // jolt
-    };
-
-    const STATE_SCALES = {
-      idle:    1.0,
-      waiting: 1.0,
-      ready:   1.1,
-      react:   1.35,   // burst outward
-      result:  1.05,
-      early:   1.25,
-    };
-
-    /* ──────────────────────────────────────────────────────────────────
-     *  2. GAME STATE MACHINE
-     * ────────────────────────────────────────────────────────────────── */
-
-    // Single source of truth for current state
-    let state = 'idle';
-
-    // DOM references (captured once to avoid repeated querySelector calls)
-    const card          = document.getElementById('card');
-    const stimulusArea  = document.getElementById('stimulus-area');
-    const stateLabel    = document.getElementById('state-label');
-    const subLabel      = document.getElementById('sub-label');
-    const resultTime    = document.getElementById('result-time');
-    const btnStart      = document.getElementById('btn-start');
-    const btnReset      = document.getElementById('btn-reset');
-    const statLast      = document.getElementById('stat-last');
-    const statAvg       = document.getElementById('stat-avg');
-    const statBest      = document.getElementById('stat-best');
-    const statWorst     = document.getElementById('stat-worst');
-    const statRounds    = document.getElementById('stat-rounds');
-
-    // Session statistics accumulator
-    const stats = {
-      times:  [],
-      rounds: 0,
-    };
-
-    // Timing bookmarks
-    let   reactionStart   = 0;
-    let   waitTimeout     = null;
-
-    /**
-     * setState — the single entry point for all state changes.
-     * Cancels any pending timeout, updates the `state` variable, then
-     * calls the two update helpers to sync UI and Three.js scene.
-     */
-    function setState(newState) {
-      // Cancel any pending wait timer when state changes
-      if (waitTimeout !== null) {
-        clearTimeout(waitTimeout);
-        waitTimeout = null;
-      }
-
-      state = newState;
-      updateUI(newState);
-      updateScene(newState);
-    }
-
-    /**
-     * updateUI — syncs all DOM elements to the new state.
-     * Only called from setState; never called directly.
-     */
-    function updateUI(s) {
-      // Sync data attributes (drives CSS rules)
-      card.dataset.state         = s;
-      stimulusArea.dataset.state = s;
-
-      // Reset result time visibility
-      resultTime.classList.remove('visible');
-
-      switch (s) {
-
-        case 'idle':
-          stateLabel.textContent = 'Ready?';
-          stateLabel.style.color = 'var(--color-text-secondary)';
-          subLabel.textContent   = 'Press Start to begin';
-          subLabel.style.opacity = '1';
-          stimulusArea.dataset.clickable = 'false';
-          stimulusArea.setAttribute('aria-label', 'Reaction stimulus — game has not started');
-          btnStart.textContent   = 'Start';
-          btnStart.classList.remove('hidden');
-          break;
-
-        case 'waiting':
-          stateLabel.textContent = 'Wait…';
-          stateLabel.style.color = 'var(--color-amber)';
-          subLabel.textContent   = 'Watch the signal, not the clock';
-          stimulusArea.dataset.clickable = 'true';
-          stimulusArea.setAttribute('aria-label', 'Waiting — do not click yet');
-          btnStart.classList.add('hidden');
-          break;
-
-        case 'ready':
-          stateLabel.textContent = 'Get ready…';
-          stateLabel.style.color = 'var(--color-amber)';
-          subLabel.textContent   = 'The signal is coming';
-          stimulusArea.dataset.clickable = 'true';
-          stimulusArea.setAttribute('aria-label', 'Get ready — click immediately when the signal appears');
-          break;
-
-        case 'react':
-          stateLabel.textContent = 'CLICK!';
-          stateLabel.style.color = 'var(--color-mint)';
-          subLabel.textContent   = 'Click or tap now!';
-          stimulusArea.dataset.clickable = 'true';
-          stimulusArea.setAttribute('aria-label', 'Click now!');
-          reactionStart = performance.now();
-          break;
-
-        case 'result': {
-          const ms = Math.round(performance.now() - reactionStart);
-          recordTime(ms);
-
-          stateLabel.textContent = 'Nicely done';
-          stateLabel.style.color = 'var(--color-mint)';
-          subLabel.textContent   = 'Click Start for another round';
-          subLabel.style.opacity = '1';
-
-          resultTime.textContent = ms + ' ms';
-          resultTime.classList.add('visible');
-
-          statLast.textContent   = ms + ' ms';
-          statLast.classList.add('highlight');
-
-          stimulusArea.dataset.clickable = 'false';
-          stimulusArea.setAttribute('aria-label', 'Round complete');
-
-          btnStart.textContent = 'Play again';
-          btnStart.classList.remove('hidden');
-          btnReset.classList.remove('hidden');
-          updateStatsDisplay();
-          break;
-        }
-
-        case 'early':
-          stateLabel.textContent = 'Too early!';
-          stateLabel.style.color = 'var(--color-red)';
-          subLabel.textContent   = 'You clicked before the signal. Starting over…';
-          stimulusArea.dataset.clickable = 'false';
-          stimulusArea.setAttribute('aria-label', 'Too early — round restarting');
-
-          // Auto-restart after a short penalty delay
-          waitTimeout = setTimeout(() => setState('idle'), 2000);
-          break;
-      }
-    }
-
-    /**
-     * updateScene — sets Three.js lerp targets for the new state.
-     * Lerping happens in the animation loop, not here.
-     */
-    function updateScene(s) {
-      targetColor.set(STATE_COLORS[s] || '#8888A8');
-      targetSpeed = STATE_SPEEDS[s]  ?? 1.0;
-      targetScale = STATE_SCALES[s]  ?? 1.0;
-    }
-
-    /* ──────────────────────────────────────────────────────────────────
-     *  3. ANIMATION LOOP
-     * ────────────────────────────────────────────────────────────────── */
-
-    const clock = new THREE.Clock();
-
-    function animate() {
-      requestAnimationFrame(animate);
-
-      const delta = clock.getDelta();   // seconds since last frame
-      const t     = clock.getElapsedTime();
-
-      // ── Lerp speed and scale toward targets ──
-      // Using alpha = 1 - e^(-k*dt) for framerate-independent lerp.
-      // A k of ~5 gives a snappy but smooth ~0.2s transition.
-      const lerpAlpha = 1 - Math.exp(-5 * delta);
-      currentSpeed += (targetSpeed - currentSpeed) * lerpAlpha;
-      currentScale += (targetScale - currentScale) * lerpAlpha;
-
-      // ── Lerp colour toward target ──
-      currentColor.lerp(targetColor, lerpAlpha * 1.2);
-
-      // ── Update each mesh ──
-      meshes.forEach((mesh, i) => {
-        const ud = mesh.userData;
-
-        // Rotation — velocity scaled by current speed
-        mesh.rotation.x += ud.rotVel.x * currentSpeed;
-        mesh.rotation.y += ud.rotVel.y * currentSpeed;
-        mesh.rotation.z += ud.rotVel.z * currentSpeed;
-
-        // Gentle sinusoidal float (independent of game speed)
-        const floatY = Math.sin(t * 0.4 + ud.floatOffset) * ud.floatAmp;
-        mesh.position.y += floatY * delta * 15;  // apply as velocity
-
-        // Breathing scale: subtle pulse layered on top of state scale
-        const breathe = 1 + Math.sin(t * 1.1 + ud.scaleOffset) * 0.03;
-        mesh.scale.setScalar(ud.baseScale * currentScale * breathe);
-
-        // Apply lerped colour to each mesh's own material clone
-        mesh.material.color.copy(currentColor);
+    // Drive explosion fragments
+    if(exploding&&fragments.length>0){
+      const progress=Math.min((performance.now()-explodeStartTime)/EXPLODE_DURATION,1);
+      fragments.forEach(f=>{
+        f.vx*=.991; f.vy*=.991; f.vz*=.991; f.vy-=.0015;
+        f.mesh.position.x+=f.vx; f.mesh.position.y+=f.vy; f.mesh.position.z+=f.vz;
+        f.mesh.rotateOnAxis(f.tumble,f.angSpeed);
+        f.mesh.material.opacity=Math.max(0,progress<.40?1:1-(progress-.40)/.60);
+        f.mesh.material.emissive.copy(currentColor);
+        f.mesh.material.emissiveIntensity=(1-progress)*1.0;
       });
-
-      renderer.render(scene, camera);
     }
+    renderer.render(scene,camera);
+  }
 
-    animate();
+  new ResizeObserver(()=>fitRenderer()).observe(stimBox);
+  fitRenderer(); animate();
 
-    // ── Resize handler ──
-    function onResize() {
-      const w = window.innerWidth;
-      const h = window.innerHeight;
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
-      renderer.setSize(w, h);
-    }
-
-    window.addEventListener('resize', onResize);
-
-    /* ──────────────────────────────────────────────────────────────────
-     *  4. GAME LOGIC
-     * ────────────────────────────────────────────────────────────────── */
-
-    /**
-     * startRound — begins the waiting → ready → react sequence.
-     * Delay is randomised between 2–5 seconds, split in half so the
-     * "get ready" stage always fires after the halfway point,
-     * increasing tension without revealing the exact moment.
-     */
-    function startRound() {
-      setState('waiting');
-
-      // Random total wait: 2000–5000 ms
-      const totalDelay = 2000 + Math.random() * 3000;
-      // "Get ready" fires at 55–65% through the wait window
-      const readyFraction  = 0.55 + Math.random() * 0.1;
-      const readyDelay     = totalDelay * readyFraction;
-
-      waitTimeout = setTimeout(() => {
-        setState('ready');
-        // Remaining time before actual stimulus
-        waitTimeout = setTimeout(() => {
-          setState('react');
-        }, totalDelay - readyDelay);
-      }, readyDelay);
-    }
-
-    /**
-     * handleClick — central pointer handler for the stimulus area.
-     * Behaviour is state-dependent:
-     *   waiting / ready  → too early
-     *   react            → record time
-     *   anything else    → ignore
-     */
-    function handleClick() {
-      if (state === 'waiting' || state === 'ready') {
-        setState('early');
-      } else if (state === 'react') {
-        setState('result');
+  /* ═══════════════════════════════════════
+     GLOBE EXPLOSION
+  ═══════════════════════════════════════ */
+  function explodeGlobe(onComplete){
+    if(exploding)return;
+    exploding=true; targetSpeed=8; targetScale=1.3; triggerFlash();
+    setTimeout(()=>{
+      globe.visible=false; wire.visible=false; core.visible=false; halo.visible=false;
+      const pos=globe.geometry.getAttribute('position');
+      const idx=globe.geometry.getIndex();
+      const total=idx?idx.count/3:pos.count/3;
+      const SAMPLE=Math.max(1,Math.floor(total/160));
+      const va=new THREE.Vector3(),vb=new THREE.Vector3(),vc=new THREE.Vector3();
+      for(let t=0;t<total;t+=SAMPLE){
+        let ia,ib,ic;
+        if(idx){ia=idx.getX(t*3);ib=idx.getX(t*3+1);ic=idx.getX(t*3+2);}
+        else{ia=t*3;ib=t*3+1;ic=t*3+2;}
+        va.fromBufferAttribute(pos,ia).applyMatrix4(globe.matrixWorld);
+        vb.fromBufferAttribute(pos,ib).applyMatrix4(globe.matrixWorld);
+        vc.fromBufferAttribute(pos,ic).applyMatrix4(globe.matrixWorld);
+        // Centroid
+        const cx=(va.x+vb.x+vc.x)/3, cy=(va.y+vb.y+vc.y)/3, cz=(va.z+vb.z+vc.z)/3;
+        // Vertices relative to centroid — this is what makes movement work correctly
+        const geo=new THREE.BufferGeometry();
+        geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array([
+          va.x-cx,va.y-cy,va.z-cz, vb.x-cx,vb.y-cy,vb.z-cz, vc.x-cx,vc.y-cy,vc.z-cz
+        ]),3)); geo.computeVertexNormals();
+        const sp=.05+Math.random()*.12, len=Math.sqrt(cx*cx+cy*cy+cz*cz)||1;
+        const tumble=new THREE.Vector3(Math.random()-.5,Math.random()-.5,Math.random()-.5).normalize();
+        const mat=new THREE.MeshStandardMaterial({color:currentColor.clone(),emissive:currentColor.clone(),emissiveIntensity:.7,metalness:.5,roughness:.35,transparent:true,opacity:1,side:THREE.DoubleSide,depthWrite:false});
+        const mesh=new THREE.Mesh(geo,mat);
+        mesh.position.set(cx,cy,cz); scene.add(mesh);
+        fragments.push({mesh,tumble,vx:(cx/len)*sp+(Math.random()-.5)*.03,vy:(cy/len)*sp+(Math.random()-.5)*.03,vz:(cz/len)*sp+(Math.random()-.5)*.03,angSpeed:.05+Math.random()*.20});
       }
+      explodeStartTime=performance.now();
+    },400);
+    setTimeout(()=>{
+      fragments.forEach(f=>{scene.remove(f.mesh);f.mesh.geometry.dispose();f.mesh.material.dispose();});
+      fragments=[]; exploding=false;
+      globe.visible=true; wire.visible=true; core.visible=true; halo.visible=true;
+      targetSpeed=STATE_SPEEDS.idle; targetScale=STATE_SCALES.idle;
+      if(typeof onComplete==='function') onComplete();
+    },EXPLODE_DURATION+500);
+  }
+
+  /* ═══════════════════════════════════════
+     STATE MACHINE
+  ═══════════════════════════════════════ */
+  function setState(s){
+    if(waitTimeout){clearTimeout(waitTimeout);waitTimeout=null;}
+    state=s; updateUI(s); updateScene(s);
+  }
+
+  function updateUI(s){
+    stimBox.dataset.state=s;
+    stimBox.dataset.clickable=(s==='waiting'||s==='ready'||s==='react')?'true':'false';
+    subLabel.style.color='';
+    switch(s){
+      case 'idle':
+        stateLabel.textContent='Ready?'; stateLabel.style.color='#8888A8';
+        subLabel.textContent='Press Start'; btnStart.textContent='Start';
+        btnStart.classList.remove('hidden'); btnReset.classList.add('hidden'); break;
+      case 'waiting':
+        stateLabel.textContent='Wait…'; stateLabel.style.color='var(--color-amber)';
+        subLabel.textContent="Don't click yet"; btnStart.classList.add('hidden'); break;
+      case 'ready':
+        stateLabel.textContent='Get ready…'; stateLabel.style.color='var(--color-amber)';
+        subLabel.textContent='Almost…'; break;
+      case 'react':
+        stateLabel.textContent='CLICK!'; stateLabel.style.color='var(--color-mint)';
+        subLabel.textContent='Now!'; reactionStart=performance.now(); break;
+      case 'result':{
+        const ms=Math.round(performance.now()-reactionStart);
+        recordTime(ms,true);
+        stateLabel.textContent=ms+' ms'; stateLabel.style.color='var(--color-mint)';
+        subLabel.textContent=ratingLabel(ms); subLabel.style.color='var(--color-mint)';
+        showToast(ratingLabel(ms),'var(--color-mint)');
+        spawnBurst('success'); updatePip(stats.currentRound-1,'done'); updateStatsDisplay(ms);
+        if(stats.currentRound>=TOTAL_ROUNDS) waitTimeout=setTimeout(()=>explodeGlobe(showEndScreen),800);
+        else{ btnStart.textContent='Next Round'; btnStart.classList.remove('hidden'); }
+        break;
+      }
+      case 'early':
+        stateLabel.textContent='Too early!'; stateLabel.style.color='var(--color-red)';
+        subLabel.textContent='Too soon — try again';
+        recordTime(null,false); showToast('Too Early! ✗','var(--color-red)');
+        spawnBurst('fail'); updatePip(stats.currentRound-1,'fail'); updateStatsDisplay(null);
+        if(stats.currentRound>=TOTAL_ROUNDS) waitTimeout=setTimeout(()=>explodeGlobe(showEndScreen),1000);
+        else waitTimeout=setTimeout(()=>setState('idle'),2000);
+        break;
     }
+  }
 
-    /**
-     * recordTime — appends a reaction time to the session log
-     * and updates rolling stats.
-     */
-    function recordTime(ms) {
-      stats.times.push(ms);
-      stats.rounds += 1;
+  function updateScene(s){
+    targetColor.set(STATE_COLORS[s]??'#8888A8');
+    targetSpeed=STATE_SPEEDS[s]??1; targetScale=STATE_SCALES[s]??1; targetGlow=STATE_GLOWS[s]??0;
+  }
+
+  /* ═══════════════════════════════════════
+     PIPS / TOAST / BURST / END SCREEN
+  ═══════════════════════════════════════ */
+  function updatePip(i,st){if(i<0||i>=pips.length)return; pips[i].className='pip '+st; stats.pipStatus[i]=st;}
+  function setActivePip(i){pips.forEach((p,j)=>{if(!stats.pipStatus[j])p.className=j===i?'pip active':'pip';});}
+
+  let toastAnim=null;
+  function showToast(text,color){
+    if(toastAnim){cancelAnimationFrame(toastAnim);toastAnim=null;}
+    reactionToast.textContent=text; reactionToast.style.color=color;
+    // Start at centre-bottom of the stimulus box and drift DOWN
+    reactionToast.style.top='auto';
+    reactionToast.style.bottom='2.8rem'; // anchor near the labels at the bottom
+    reactionToast.style.opacity='0';
+    reactionToast.style.transform='translateX(-50%) translateY(0px)';
+    const start=performance.now(),DUR=1400;
+    function step(now){
+      const t=Math.min((now-start)/DUR,1);
+      // Fade: quick in, slow out
+      const a=t<.15?t/.15:1-((t-.15)/.85);
+      // Drift downward 35px — opposite direction to country pop which goes up
+      reactionToast.style.opacity=Math.max(0,a).toFixed(3);
+      reactionToast.style.transform=`translateX(-50%) translateY(${t*35}px)`;
+      if(t<1)toastAnim=requestAnimationFrame(step); else reactionToast.style.opacity='0';
     }
+    toastAnim=requestAnimationFrame(step);
+  }
 
-    /**
-     * updateStatsDisplay — reads from stats and writes to DOM.
-     * Always called after recordTime so numbers are fresh.
-     */
-    function updateStatsDisplay() {
-      statRounds.textContent = stats.rounds;
-
-      if (stats.times.length === 0) return;
-
-      const best  = Math.min(...stats.times);
-      const worst = Math.max(...stats.times);
-      const avg   = Math.round(stats.times.reduce((a, b) => a + b, 0) / stats.times.length);
-
-      statBest.textContent  = best  + ' ms';
-      statWorst.textContent = worst + ' ms';
-      statAvg.textContent   = avg   + ' ms';
+  let burstP=[],burstRunning=false;
+  function spawnBurst(type){
+    const r=stimBox.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;
+    if(type==='success'){
+      const C=['#00F5A0','#00D490','#80FFD0','#FFFFFF','#00FFB0','#44FFBE'];
+      for(let i=0;i<60;i++){
+        const ang=Math.random()*Math.PI*2,sp=3+Math.random()*8;
+        burstP.push({x:cx,y:cy,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp-3,size:4+Math.random()*8,color:C[Math.floor(Math.random()*C.length)],rot:Math.random()*Math.PI*2,rotV:(Math.random()-.5)*.3,shape:Math.random()<.5?'rect':'circle',gravity:.18+Math.random()*.1,life:1,decay:.012+Math.random()*.010});
+      }
+    } else {
+      for(let i=0;i<3;i++) burstP.push({x:cx,y:cy,type:'ring',r:0,alpha:.8-i*.18,color:'#FF4D4D',speed:6+i*2,life:1,decay:.022+i*.006});
     }
+    if(!burstRunning)runBurst();
+  }
+  function runBurst(){
+    burstRunning=true; burstCtx.clearRect(0,0,burstCanvas.width,burstCanvas.height);
+    burstP=burstP.filter(p=>p.life>0);
+    burstP.forEach(p=>{
+      p.life-=p.decay; const a=Math.max(0,p.life);
+      if(p.type==='ring'){
+        p.r+=p.speed; burstCtx.save(); burstCtx.globalAlpha=a*p.alpha;
+        burstCtx.strokeStyle=p.color; burstCtx.lineWidth=3; burstCtx.shadowColor=p.color; burstCtx.shadowBlur=16;
+        burstCtx.beginPath(); burstCtx.arc(p.x,p.y,p.r,0,Math.PI*2); burstCtx.stroke(); burstCtx.restore();
+      } else {
+        p.x+=p.vx; p.y+=p.vy; p.vy+=p.gravity; p.vx*=.98; p.rot+=p.rotV;
+        burstCtx.save(); burstCtx.globalAlpha=a; burstCtx.fillStyle=p.color;
+        burstCtx.shadowColor=p.color; burstCtx.shadowBlur=6;
+        burstCtx.translate(p.x,p.y); burstCtx.rotate(p.rot);
+        if(p.shape==='rect') burstCtx.fillRect(-p.size/2,-p.size/4,p.size,p.size/2);
+        else{burstCtx.beginPath();burstCtx.arc(0,0,p.size/2,0,Math.PI*2);burstCtx.fill();}
+        burstCtx.restore();
+      }
+    });
+    if(burstP.length>0) requestAnimationFrame(runBurst);
+    else{burstRunning=false;burstCtx.clearRect(0,0,burstCanvas.width,burstCanvas.height);}
+  }
 
-    /**
-     * resetStats — clears session data and returns to idle.
-     */
-    function resetStats() {
-      stats.times  = [];
-      stats.rounds = 0;
+  function showEndScreen(){
+    const times=stats.times, best=times.length?Math.min(...times):null;
+    const avg=times.length?Math.round(times.reduce((a,b)=>a+b,0)/times.length):null;
+    const success=times.length, fails=stats.fails;
+    let grade,emoji,title,subtitle;
+    if(!success)    {grade='💀';emoji='😬';title='Rough Round';   subtitle='All early clicks — patience is the skill here!';}
+    else if(avg<180){grade='S'; emoji='⚡';title='Superhuman!';   subtitle='Extraordinary reactions. Are you even human?';}
+    else if(avg<220){grade='A'; emoji='🔥';title='Excellent!';    subtitle='Elite-tier reactions. Top 5% of players.';}
+    else if(avg<270){grade='B'; emoji='✅';title='Good Job!';     subtitle='Solid reactions. Above the human average.';}
+    else if(avg<340){grade='C'; emoji='👍';title='Not Bad';       subtitle='Around the human average of ~250ms.';}
+    else            {grade='D'; emoji='🙈';title='Keep Practising';subtitle='A bit slow — warm up and try again!';}
+    const GC={S:'#00F5A0',A:'#00D490',B:'#F5A623',C:'#AAAACC',D:'#FF8888','💀':'#FF4D4D'};
+    endGrade.textContent=grade; endGrade.style.color=GC[grade]||'#E8E8F0';
+    endEmoji.textContent=emoji; endTitle.textContent=title; endSubtitle.textContent=subtitle;
+    endBest.textContent=best?best+' ms':'—'; endAvg.textContent=avg?avg+' ms':'—';
+    endSuccess.textContent=success+' / '+TOTAL_ROUNDS; endFails.textContent=fails;
+    endScreen.classList.add('visible'); spawnBurst(success>=3?'success':'fail');
+  }
+  function hideEndScreen(){endScreen.classList.remove('visible');}
 
-      statLast.textContent  = '—';
-      statAvg.textContent   = '—';
-      statBest.textContent  = '—';
-      statWorst.textContent = '—';
-      statRounds.textContent = '0';
-      statLast.classList.remove('highlight');
-
+  /* ═══════════════════════════════════════
+     GAME LOGIC
+  ═══════════════════════════════════════ */
+  function startRound(){
+    if(stats.currentRound===0||stats.currentRound>=TOTAL_ROUNDS){
+      stats.times=[]; stats.rounds=0; stats.fails=0; stats.currentRound=0; stats.pipStatus=[];
+      pips.forEach(p=>p.className='pip');
+      statLast.textContent='—'; statLast.className='score-value'; statLast.style.color='';
+      statBest.textContent='—'; statBest.className='score-value'; statAvg.textContent='—';
       btnReset.classList.add('hidden');
-      setState('idle');
     }
+    stats.currentRound++; stats.rounds++;
+    roundNum.textContent=stats.currentRound; statRounds.textContent=stats.currentRound+' / '+TOTAL_ROUNDS;
+    setActivePip(stats.currentRound-1); triggerFlash(); playStart(); setState('waiting');
+    const total=2000+Math.random()*3000, readyAt=total*(.55+Math.random()*.10);
+    waitTimeout=setTimeout(()=>{setState('ready'); waitTimeout=setTimeout(()=>setState('react'),total-readyAt);},readyAt);
+  }
 
-    /* ──────────────────────────────────────────────────────────────────
-     *  5. EVENT LISTENERS
-     * ────────────────────────────────────────────────────────────────── */
+  /* ═══════════════════════════════════════
+     COUNTRY QUEUE — no repeats until all shown
+     ═══════════════════════════════════════
+     We keep a shuffled copy of every country name.
+     nextCountry() pops from the front; when the queue
+     empties it refills with a fresh shuffle so the
+     full cycle starts over without any repeats mid-cycle. */
+  const ALL_COUNTRIES=['Afghanistan','Albania','Algeria','Andorra','Angola','Argentina','Armenia','Australia','Austria','Azerbaijan','Bahamas','Bahrain','Bangladesh','Belarus','Belgium','Belize','Benin','Bhutan','Bolivia','Bosnia','Botswana','Brazil','Brunei','Bulgaria','Burkina Faso','Burundi','Cambodia','Cameroon','Canada','Chad','Chile','China','Colombia','Comoros','Congo','Croatia','Cuba','Cyprus','Czechia','Denmark','Djibouti','Dominican Rep.','Ecuador','Egypt','El Salvador','Eritrea','Estonia','Ethiopia','Fiji','Finland','France','Gabon','Gambia','Georgia','Germany','Ghana','Greece','Guatemala','Guinea','Guyana','Haiti','Honduras','Hungary','Iceland','India','Indonesia','Iran','Iraq','Ireland','Israel','Italy','Jamaica','Japan','Jordan','Kazakhstan','Kenya','Kuwait','Kyrgyzstan','Laos','Latvia','Lebanon','Lesotho','Liberia','Libya','Liechtenstein','Lithuania','Luxembourg','Madagascar','Malawi','Malaysia','Maldives','Mali','Malta','Mauritania','Mauritius','Mexico','Moldova','Monaco','Mongolia','Montenegro','Morocco','Mozambique','Myanmar','Namibia','Nepal','Netherlands','New Zealand','Nicaragua','Niger','Nigeria','North Korea','Norway','Oman','Pakistan','Panama','Papua New Guinea','Paraguay','Peru','Philippines','Poland','Portugal','Qatar','Romania','Russia','Rwanda','Saudi Arabia','Senegal','Serbia','Sierra Leone','Singapore','Slovakia','Slovenia','Somalia','South Africa','South Korea','South Sudan','Spain','Sri Lanka','Sudan','Suriname','Sweden','Switzerland','Syria','Taiwan','Tajikistan','Tanzania','Thailand','Timor-Leste','Togo','Trinidad','Tunisia','Turkey','Turkmenistan','Uganda','Ukraine','UAE','United Kingdom','United States','Uruguay','Uzbekistan','Venezuela','Vietnam','Yemen','Zambia','Zimbabwe'];
 
-    // Start / Play again button
-    btnStart.addEventListener('click', startRound);
-    btnStart.addEventListener('touchend', (e) => {
-      e.preventDefault();
-      startRound();
-    });
+  function shuffle(arr){
+    // Fisher-Yates in-place shuffle — each permutation equally likely
+    for(let i=arr.length-1;i>0;i--){
+      const j=Math.floor(Math.random()*(i+1));
+      [arr[i],arr[j]]=[arr[j],arr[i]];
+    }
+    return arr;
+  }
 
-    // Reset stats button
-    btnReset.addEventListener('click', resetStats);
+  let countryQueue=shuffle([...ALL_COUNTRIES]);
+  let countrySeenCount=0; // how many we've shown in the current cycle
 
-    // Stimulus area: pointer events for click AND touch on mobile
-    // We use pointerdown (not click) to capture the earliest possible moment,
-    // which gives the most accurate reaction time measurement.
-    stimulusArea.addEventListener('pointerdown', (e) => {
-      e.preventDefault();
-      handleClick();
-    });
+  function nextCountry(){
+    if(countryQueue.length===0){
+      // Full cycle done — reshuffle and start again
+      countryQueue=shuffle([...ALL_COUNTRIES]);
+      countrySeenCount=0;
+    }
+    countrySeenCount++;
+    return countryQueue.shift();
+  }
 
-    // Keyboard accessibility: Space / Enter triggers the stimulus area
-    stimulusArea.addEventListener('keydown', (e) => {
-      if (e.code === 'Space' || e.code === 'Enter') {
-        e.preventDefault();
-        handleClick();
-      }
-    });
+  /* popCountry — shows a country name flying up from the click point.
+     cx/cy are the client-space coordinates of the click. */
+  const countryPopEl=document.getElementById('country-pop');
+  let   countryPopAnim=null;
 
-    // Prevent context menu from long-press on mobile in the stimulus zone
-    stimulusArea.addEventListener('contextmenu', (e) => e.preventDefault());
+  function popCountry(cx,cy){
+    const name=nextCountry();
 
-    /* ──────────────────────────────────────────────────────────────────
-     *  6. BOOT
-     * ────────────────────────────────────────────────────────────────── */
+    // Pick a glow colour cycling through mint → amber → white
+    const colors=['#00F5A0','#F5A623','#E8E8F0','#80FFCC','#FFD080'];
+    const color=colors[Math.floor(Math.random()*colors.length)];
 
-    // Kick the state machine into its initial state — this triggers both
-    // updateUI and updateScene, so the app always starts consistently
-    // regardless of what the HTML scaffold contains.
-    setState('idle');
+    // Position at click point
+    countryPopEl.textContent=name;
+    countryPopEl.style.color=color;
+    countryPopEl.style.left=cx+'px';
+    countryPopEl.style.top=cy+'px';
+    countryPopEl.style.opacity='0';
+    countryPopEl.style.transform='translate(-50%, -50%) scale(0.6)';
+
+    if(countryPopAnim){cancelAnimationFrame(countryPopAnim);countryPopAnim=null;}
+
+    const start=performance.now();
+    const DUR=1600; // ms — total float + fade duration
+
+    function step(now){
+      const t=Math.min((now-start)/DUR,1);
+
+      // Scale: spring in quickly (0→1.1→1) in first 20%, hold, then shrink slightly out
+      let scale;
+      if     (t<.10) scale=0.6+t/.10*0.6;          // zoom in
+      else if(t<.20) scale=1.2-(t-.10)/.10*0.1;     // overshoot bounce back
+      else if(t<.70) scale=1.1;                      // hold
+      else           scale=1.1-(t-.70)/.30*0.3;      // gently shrink out
+
+      // Rise: float upward 120px — flies well clear of the bottom label zone
+      const rise=-t*120;
+
+      // Opacity: fade in fast (0→1 in 10%), hold, fade out in last 35%
+      let alpha;
+      if     (t<.10) alpha=t/.10;
+      else if(t<.65) alpha=1;
+      else           alpha=1-(t-.65)/.35;
+
+      countryPopEl.style.transform=`translate(-50%, calc(-50% + ${rise}px)) scale(${scale.toFixed(3)})`;
+      countryPopEl.style.opacity=Math.max(0,alpha).toFixed(3);
+
+      if(t<1) countryPopAnim=requestAnimationFrame(step);
+      else    countryPopEl.style.opacity='0';
+    }
+    countryPopAnim=requestAnimationFrame(step);
+  }
+
+  function handleClick(e){
+    // Determine click/tap coordinates for the country pop position
+    // Fall back to centre of stimulus box if no event coordinates available
+    const rect=stimBox.getBoundingClientRect();
+    const cx = (e&&e.clientX!=null) ? e.clientX : rect.left+rect.width/2;
+    const cy = (e&&e.clientY!=null) ? e.clientY : rect.top+rect.height/2;
+
+    if(state==='waiting'||state==='ready'){
+      popCountry(cx,cy);
+      triggerFlash(); playClickEarly(); setState('early');
+    } else if(state==='react'){
+      popCountry(cx,cy);
+      triggerFlash(); playClickGood(); setState('result');
+    }
+  }
+
+  function recordTime(ms,success){ if(success&&ms!==null)stats.times.push(ms); else stats.fails++; }
+
+  function updateStatsDisplay(ms){
+    statRounds.textContent=stats.currentRound+' / '+TOTAL_ROUNDS;
+    if(ms!==null){statLast.textContent=ms+' ms';statLast.className='score-value mint';statLast.style.color='';}
+    else{statLast.textContent='Early';statLast.className='score-value';statLast.style.color='var(--color-red)';}
+    if(stats.times.length>0){
+      const best=Math.min(...stats.times);
+      const avg=Math.round(stats.times.reduce((a,b)=>a+b,0)/stats.times.length);
+      statBest.textContent=best+' ms'; statBest.className='score-value'+(ms===best&&stats.times.length>1?' mint':'');
+      statAvg.textContent=avg+' ms';
+    }
+  }
+
+  function ratingLabel(ms){
+    if(ms<180)return'⚡ Superhuman!'; if(ms<220)return'🔥 Excellent!';
+    if(ms<270)return'✓ Good';         if(ms<340)return'Average';
+    return'Keep going…';
+  }
+
+  function resetStats(){
+    stats.times=[]; stats.rounds=0; stats.fails=0; stats.currentRound=0; stats.pipStatus=[];
+    pips.forEach(p=>p.className='pip');
+    statLast.textContent='—'; statLast.className='score-value'; statLast.style.color='';
+    statBest.textContent='—'; statBest.className='score-value';
+    statAvg.textContent='—'; statRounds.textContent='0 / 5'; roundNum.textContent='0';
+    btnReset.classList.add('hidden'); hideEndScreen(); setState('idle');
+  }
+
+  /* ═══════════════════════════════════════
+     SOUND — Web Audio API, no files needed
+  ═══════════════════════════════════════ */
+  let audioCtx=null;
+  function getAudioCtx(){
+    if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+    if(audioCtx.state==='suspended')audioCtx.resume();
+    return audioCtx;
+  }
+  function playTone(type,freq,freqEnd,peak,dur,decay){
+    const ctx=getAudioCtx(),now=ctx.currentTime;
+    const osc=ctx.createOscillator(),gain=ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination); osc.type=type;
+    osc.frequency.setValueAtTime(freq,now);
+    osc.frequency.exponentialRampToValueAtTime(freqEnd,now+dur*.6);
+    gain.gain.setValueAtTime(peak,now);
+    gain.gain.exponentialRampToValueAtTime(.0001,now+decay);
+    osc.start(now); osc.stop(now+dur);
+  }
+  function playClickGood(){
+    // Bell: four harmonic partials — each decays at its own rate
+    const ctx=getAudioCtx(),now=ctx.currentTime;
+    function part(f0,f1,pk,dc){
+      const o=ctx.createOscillator(),g=ctx.createGain();
+      o.connect(g); g.connect(ctx.destination); o.type='sine';
+      o.frequency.setValueAtTime(f0,now); o.frequency.exponentialRampToValueAtTime(f1,now+dc);
+      g.gain.setValueAtTime(.0001,now); g.gain.exponentialRampToValueAtTime(pk,now+.004);
+      g.gain.exponentialRampToValueAtTime(.0001,now+dc);
+      o.start(now); o.stop(now+dc+.05);
+    }
+    part(1200,1160,.22,.08); part(880,862,.28,1.8); part(660,648,.18,2.8); part(440,433,.12,4.5);
+  }
+  function playClickEarly(){ playTone('sawtooth',120,80,.25,.30,.28); playTone('sine',90,70,.15,.25,.22); }
+  function playStart(){ playTone('sine',440,660,.14,.20,.18); }
+
+  /* ═══════════════════════════════════════
+     EVENTS & BOOT
+  ═══════════════════════════════════════ */
+  btnStart.addEventListener('click',startRound);
+  btnStart.addEventListener('touchend',e=>{e.preventDefault();startRound();});
+  btnReset.addEventListener('click',resetStats);
+  btnPlayAgain.addEventListener('click',()=>{hideEndScreen();resetStats();});
+  stimBox.addEventListener('pointerdown',e=>{e.preventDefault();handleClick(e);});
+  stimBox.addEventListener('keydown',e=>{if(e.code==='Space'||e.code==='Enter'){e.preventDefault();handleClick(e);}});
+  stimBox.addEventListener('contextmenu',e=>e.preventDefault());
+
+  setState('idle');
   </script>
 </body>
 </html>
